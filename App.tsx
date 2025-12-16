@@ -23,17 +23,11 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
+import { API_BASE_URL } from './src/apiConfig';
 
-type Screen = 'home' | 'signin' | 'signup' | 'hub' | 'orders' | 'orderEdit' | 'exitInspections' | 'warehouseMain' | 'warehouse' | 'warehouseInventoryList' | 'warehouseInventory' | 'warehouseInventoryEdit' | 'newWarehouseOrder' | 'maintenance' | 'maintenanceTasks' | 'maintenanceTaskDetail' | 'newMaintenanceTask' | 'reports' | 'employeeHoursReport' | 'revenueReport' | 'expensesReport' | 'cleaningReport';
+type Screen = 'home' | 'signin' | 'signup' | 'hub' | 'orders' | 'orderEdit' | 'exitInspections' | 'warehouse' | 'newWarehouseOrder' | 'maintenance' | 'maintenanceTasks' | 'maintenanceTaskDetail' | 'newMaintenanceTask';
 type OrderStatus = 'חדש' | 'באישור' | 'שולם חלקית' | 'שולם' | 'בוטל';
 type InspectionStatus = 'צריך ביקורת' | 'בביצוע' | 'הושלם';
-
-type Payment = {
-  id: string;
-  amount: number;
-  method: string;
-  date: string;
-};
 
 type Order = {
   id: string;
@@ -48,7 +42,6 @@ type Order = {
   paidAmount: number;
   totalAmount: number;
   paymentMethod: string;
-  payments?: Payment[];
 };
 
 type InspectionMission = {
@@ -148,10 +141,6 @@ const initialOrders: Order[] = [
     paidAmount: 1200,
     totalAmount: 2200,
     paymentMethod: 'אשראי',
-    payments: [
-      { id: 'PAY-001-1', amount: 800, method: 'אשראי', date: '2025-12-15' },
-      { id: 'PAY-001-2', amount: 400, method: 'מזומן', date: '2025-12-18' },
-    ],
   },
   {
     id: 'ORD-002',
@@ -166,9 +155,6 @@ const initialOrders: Order[] = [
     paidAmount: 700,
     totalAmount: 1200,
     paymentMethod: 'מזומן',
-    payments: [
-      { id: 'PAY-002-1', amount: 700, method: 'מזומן', date: '2025-12-17' },
-    ],
   },
   {
     id: 'ORD-003',
@@ -183,7 +169,6 @@ const initialOrders: Order[] = [
     paidAmount: 0,
     totalAmount: 1600,
     paymentMethod: 'טרם נקבע',
-    payments: [],
   },
 ];
 
@@ -330,8 +315,6 @@ function AppContent() {
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(initialInventoryItems);
   const [inventoryOrders, setInventoryOrders] = useState<InventoryOrder[]>(initialInventoryOrders);
   const [selectedUnit, setSelectedUnit] = useState<string>('כל המתחמים');
-  const [selectedWarehouse, setSelectedWarehouse] = useState<string | null>(null);
-  const [selectedInventoryItemId, setSelectedInventoryItemId] = useState<string | null>(null);
   const [maintenanceUnits, setMaintenanceUnits] = useState<MaintenanceUnit[]>(initialMaintenanceUnits);
   const [selectedMaintenanceUnitId, setSelectedMaintenanceUnitId] = useState<string | null>(null);
   const [selectedMaintenanceTaskId, setSelectedMaintenanceTaskId] = useState<string | null>(null);
@@ -378,7 +361,7 @@ function AppContent() {
     }
   }, [orders, defaultInspectionTasks]);
 
-  const handleSign = (mode: 'signin' | 'signup') => {
+  const handleSign = async (mode: 'signin' | 'signup') => {
     if (!name.trim() || !password.trim()) {
       setError('אנא מלאו שם וסיסמה');
       return;
@@ -387,14 +370,63 @@ function AppContent() {
       setError('הסיסמאות אינן תואמות');
       return;
     }
+    if (mode === 'signup' && password.length < 6) {
+      setError('הסיסמה חייבת להכיל לפחות 6 תווים');
+      return;
+    }
+    
     setError('');
-    setUserName(name.trim());
-    setScreen('hub');
+    
+    try {
+      const endpoint = mode === 'signup' ? '/auth/signup' : '/auth/signin';
+      const url = `${API_BASE_URL}${endpoint}`;
+      console.log('Attempting auth:', { mode, url, username: name.trim() });
+      
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: name.trim(),
+          password: password,
+        }),
+      });
+      
+      console.log('Auth response status:', res.status, res.statusText);
+      
+      let data;
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        const text = await res.text();
+        console.error('Failed to parse JSON response:', text);
+        setError(`שגיאת שרת: ${res.status} ${res.statusText}`);
+        return;
+      }
+      
+      console.log('Auth response data:', data);
+      
+      if (!res.ok) {
+        const errorMsg = data.detail || data.message || `שגיאה ${res.status}: ${res.statusText}`;
+        setError(errorMsg);
+        return;
+      }
+      
+      // Success - set user and navigate to hub
+      setUserName(data.username || name.trim());
+      setScreen('hub');
+      setName('');
+      setPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      console.error('Auth error:', err);
+      const errorMsg = err.message || 'אירעה שגיאה בחיבור לשרת. נסה שוב.';
+      setError(errorMsg);
+    }
   };
 
   const updateOrder = (
     id: string,
-    changes: Partial<Pick<Order, 'status' | 'paidAmount' | 'paymentMethod' | 'payments' | 'totalAmount'>>,
+    changes: Partial<Pick<Order, 'status' | 'paidAmount' | 'paymentMethod'>>,
   ) => {
     setOrders(prev =>
       prev.map(o => (o.id === id ? { ...o, ...changes } : o)),
@@ -681,7 +713,7 @@ function AppContent() {
                 'הזמנות עתידיות ובחירת מתחם',
               ]}
               cta="פתח מחסן"
-              onPress={() => setScreen('warehouseMain')}
+              onPress={() => setScreen('warehouse')}
             />
             <OptionCard
               title="תחזוקה"
@@ -694,19 +726,6 @@ function AppContent() {
               ]}
               cta="פתח תחזוקה"
               onPress={() => setScreen('maintenance')}
-            />
-            <OptionCard
-              title="דוחות"
-              icon="📊"
-              accent="#8b5cf6"
-              details={[
-                'דוח עובדים שעתי',
-                'דוח הכנסות',
-                'דוח הוצאות',
-                'דוח נקיונות',
-              ]}
-              cta="פתח דוחות"
-              onPress={() => setScreen('reports')}
             />
             <OptionCard
               title="חשבוניות"
@@ -768,20 +787,6 @@ function AppContent() {
     );
   }
 
-  if (screen === 'warehouseMain') {
-    return (
-      <WarehouseMainScreen
-        onBack={() => setScreen('hub')}
-        onSelectOption={(option) => {
-          if (option === 'orders') setScreen('warehouse');
-          else if (option === 'inventory') setScreen('warehouseInventoryList');
-        }}
-        safeAreaInsets={safeAreaInsets}
-        statusBar={statusBar}
-      />
-    );
-  }
-
   if (screen === 'warehouse') {
     return (
       <WarehouseScreen
@@ -797,74 +802,11 @@ function AppContent() {
             prev.map(o => (o.id === id ? { ...o, ...updates } : o)),
           );
         }}
-        onBack={() => setScreen('warehouseMain')}
+        onBack={() => setScreen('hub')}
         onNewOrder={() => setScreen('newWarehouseOrder')}
         safeAreaInsets={safeAreaInsets}
         statusBar={statusBar}
         userName={userName || ''}
-      />
-    );
-  }
-
-  if (screen === 'warehouseInventoryList') {
-    return (
-      <WarehouseInventoryListScreen
-        onBack={() => setScreen('warehouseMain')}
-        onSelectWarehouse={(warehouse) => {
-          setSelectedWarehouse(warehouse);
-          setScreen('warehouseInventory');
-        }}
-        safeAreaInsets={safeAreaInsets}
-        statusBar={statusBar}
-      />
-    );
-  }
-
-  if (screen === 'warehouseInventory') {
-    if (!selectedWarehouse) {
-      setScreen('warehouseInventoryList');
-      return null;
-    }
-    return (
-      <WarehouseInventoryScreen
-        warehouseName={selectedWarehouse}
-        items={inventoryItems}
-        onUpdateItems={(updatedItems) => {
-          setInventoryItems(updatedItems);
-        }}
-        onBack={() => setScreen('warehouseInventoryList')}
-        onEditItem={(itemId) => {
-          setSelectedInventoryItemId(itemId);
-          setScreen('warehouseInventoryEdit');
-        }}
-        safeAreaInsets={safeAreaInsets}
-        statusBar={statusBar}
-      />
-    );
-  }
-
-  if (screen === 'warehouseInventoryEdit') {
-    const item = inventoryItems.find(i => i.id === selectedInventoryItemId);
-    if (!item || !selectedInventoryItemId) {
-      setScreen('warehouseInventory');
-      return null;
-    }
-    return (
-      <WarehouseInventoryEditScreen
-        item={item}
-        onSave={(updatedItem) => {
-          setInventoryItems(prev =>
-            prev.map(i => i.id === updatedItem.id ? updatedItem : i)
-          );
-          setSelectedInventoryItemId(null);
-          setScreen('warehouseInventory');
-        }}
-        onCancel={() => {
-          setSelectedInventoryItemId(null);
-          setScreen('warehouseInventory');
-        }}
-        safeAreaInsets={safeAreaInsets}
-        statusBar={statusBar}
       />
     );
   }
@@ -974,64 +916,6 @@ function AppContent() {
         safeAreaInsets={safeAreaInsets}
         statusBar={statusBar}
         userName={userName || ''}
-      />
-    );
-  }
-
-  if (screen === 'reports') {
-    return (
-      <ReportsScreen
-        onBack={() => setScreen('hub')}
-        onSelectReport={(reportType) => {
-          if (reportType === 'employeeHours') setScreen('employeeHoursReport');
-          else if (reportType === 'revenue') setScreen('revenueReport');
-          else if (reportType === 'expenses') setScreen('expensesReport');
-          else if (reportType === 'cleaning') setScreen('cleaningReport');
-        }}
-        safeAreaInsets={safeAreaInsets}
-        statusBar={statusBar}
-      />
-    );
-  }
-
-  if (screen === 'employeeHoursReport') {
-    return (
-      <EmployeeHoursReportScreen
-        onBack={() => setScreen('reports')}
-        safeAreaInsets={safeAreaInsets}
-        statusBar={statusBar}
-      />
-    );
-  }
-
-  if (screen === 'revenueReport') {
-    return (
-      <RevenueReportScreen
-        orders={orders}
-        onBack={() => setScreen('reports')}
-        safeAreaInsets={safeAreaInsets}
-        statusBar={statusBar}
-      />
-    );
-  }
-
-  if (screen === 'expensesReport') {
-    return (
-      <ExpensesReportScreen
-        onBack={() => setScreen('reports')}
-        safeAreaInsets={safeAreaInsets}
-        statusBar={statusBar}
-      />
-    );
-  }
-
-  if (screen === 'cleaningReport') {
-    return (
-      <CleaningReportScreen
-        missions={inspectionMissions}
-        onBack={() => setScreen('reports')}
-        safeAreaInsets={safeAreaInsets}
-        statusBar={statusBar}
       />
     );
   }
@@ -1200,6 +1084,14 @@ function OrderCard({ order, onEdit }: OrderCardProps) {
           </View>
         </View>
 
+        {/* Payment Method */}
+        <View style={styles.orderInfoRow}>
+          <View style={styles.orderInfoContent}>
+            <Text style={styles.orderInfoLabel}>אופן תשלום</Text>
+            <Text style={styles.orderInfoValue}>{order.paymentMethod || 'לא צוין'}</Text>
+          </View>
+        </View>
+
         {/* Special Requests */}
         {order.specialRequests ? (
           <View style={styles.orderSpecialSection}>
@@ -1273,7 +1165,6 @@ type OrderEditProps = {
         | 'specialRequests'
         | 'internalNotes'
         | 'totalAmount'
-        | 'payments'
       >
     >,
   ) => void;
@@ -1294,12 +1185,9 @@ function OrderEditScreen({ order, onSave, onCancel }: OrderEditProps) {
     order.specialRequests || '',
   );
   const [internalNotes, setInternalNotes] = useState(order.internalNotes || '');
-  const [payments, setPayments] = useState<Payment[]>(order.payments || []);
-  const [newPaymentAmount, setNewPaymentAmount] = useState('');
-  const [newPaymentMethod, setNewPaymentMethod] = useState('');
+  const [addPayment, setAddPayment] = useState('');
   const [statusOpen, setStatusOpen] = useState(false);
   const [methodOpen, setMethodOpen] = useState(false);
-  const [newPaymentMethodOpen, setNewPaymentMethodOpen] = useState(false);
   const [showAddPayment, setShowAddPayment] = useState(false);
 
   React.useEffect(() => {
@@ -1314,52 +1202,32 @@ function OrderEditScreen({ order, onSave, onCancel }: OrderEditProps) {
     setGuestsCount(order.guestsCount.toString());
     setSpecialRequests(order.specialRequests || '');
     setInternalNotes(order.internalNotes || '');
-    setPayments(order.payments || []);
-    setNewPaymentAmount('');
-    setNewPaymentMethod('');
+    setAddPayment('');
     setStatusOpen(false);
     setMethodOpen(false);
-    setNewPaymentMethodOpen(false);
   }, [order]);
 
+  const paidNumber = Number(paid.replace(/,/g, '')) || 0;
   const totalNumber = Number(total.replace(/,/g, '')) || 0;
-  const totalPaidFromPayments = payments.reduce((sum, p) => sum + p.amount, 0);
   const paidPercent = Math.min(
     100,
-    totalNumber > 0 ? Math.round((totalPaidFromPayments / totalNumber) * 100) : 0,
+    totalNumber > 0 ? Math.round((paidNumber / totalNumber) * 100) : 0,
   );
-  const remainingAmount = totalNumber - totalPaidFromPayments;
 
-  const addNewPayment = () => {
-    const trimmed = newPaymentAmount.trim();
+  const addPaymentAmount = () => {
+    const trimmed = addPayment.trim();
     if (!trimmed) {
-      Alert.alert('שגיאה', 'נא להזין סכום תשלום');
-      return;
+      return true;
     }
-    if (!newPaymentMethod) {
-      Alert.alert('שגיאה', 'נא לבחור אופן תשלום');
-      return;
+    const addVal = Number(trimmed.replace(/,/g, ''));
+    if (Number.isNaN(addVal) || addVal <= 0) {
+      Alert.alert('שגיאה', 'נא להזין סכום הוספה תקין וחיובי');
+      return false;
     }
-    const amount = Number(trimmed.replace(/,/g, ''));
-    if (Number.isNaN(amount) || amount <= 0) {
-      Alert.alert('שגיאה', 'נא להזין סכום תקין וחיובי');
-      return;
-    }
-    
-    const newPayment: Payment = {
-      id: `PAY-${order.id}-${Date.now()}`,
-      amount,
-      method: newPaymentMethod,
-      date: new Date().toISOString().split('T')[0],
-    };
-    
-    setPayments([...payments, newPayment]);
-    setNewPaymentAmount('');
-    setNewPaymentMethod('');
-  };
-
-  const removePayment = (paymentId: string) => {
-    setPayments(payments.filter(p => p.id !== paymentId));
+    const next = paidNumber + addVal;
+    setPaid(next.toString());
+    setAddPayment('');
+    return true;
   };
 
   const confirmPaymentModal = () => {
@@ -1367,24 +1235,11 @@ function OrderEditScreen({ order, onSave, onCancel }: OrderEditProps) {
       Alert.alert('שגיאה', 'סכום מלא חייב להיות חיובי');
       return;
     }
-    
-    // Calculate paid amount from payments
-    const calculatedPaid = payments.reduce((sum, p) => sum + p.amount, 0);
-    
-    // Get the most common payment method or the last one
-    const mostCommonMethod = payments.length > 0 
-      ? payments[payments.length - 1].method 
-      : 'לא צוין';
-    
-    // Save payments and calculated amounts
-    onSave(order.id, {
-      status,
-      paidAmount: calculatedPaid,
-      paymentMethod: mostCommonMethod,
-      totalAmount: totalNumber,
-      payments: payments,
-    });
-    
+    if (paidNumber < 0) {
+      Alert.alert('שגיאה', 'סכום ששולם חייב להיות חיובי');
+      return;
+    }
+    if (!addPaymentAmount()) return;
     setShowAddPayment(false);
   };
 
@@ -1397,17 +1252,14 @@ function OrderEditScreen({ order, onSave, onCancel }: OrderEditProps) {
       Alert.alert('שגיאה', 'סכום מלא חייב להיות חיובי');
       return;
     }
-    
-    // Calculate paid amount from payments
-    const calculatedPaid = payments.reduce((sum, p) => sum + p.amount, 0);
-    const mostCommonMethod = payments.length > 0 
-      ? payments[payments.length - 1].method 
-      : 'לא צוין';
-    
+    if (paidNumber < 0) {
+      Alert.alert('שגיאה', 'סכום ששולם חייב להיות חיובי');
+      return;
+    }
     onSave(order.id, {
       status,
-      paidAmount: calculatedPaid,
-      paymentMethod: mostCommonMethod,
+      paidAmount: paidNumber,
+      paymentMethod: method || 'לא צוין',
       totalAmount: totalNumber,
       guestName: guestName.trim(),
       unitNumber: unitNumber.trim(),
@@ -1416,7 +1268,6 @@ function OrderEditScreen({ order, onSave, onCancel }: OrderEditProps) {
       guestsCount: Number(guestsCount) || order.guestsCount,
       specialRequests: specialRequests.trim(),
       internalNotes: internalNotes.trim(),
-      payments: payments,
     });
   };
 
@@ -1564,122 +1415,97 @@ function OrderEditScreen({ order, onSave, onCancel }: OrderEditProps) {
       <Modal transparent visible={showAddPayment} animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>ניהול תשלומים</Text>
-            
-            {/* Summary Section */}
-            <View style={styles.paymentSummaryCard}>
-              <View style={styles.paymentSummaryRow}>
-                <Text style={styles.paymentSummaryLabel}>סכום כולל:</Text>
-                <Text style={styles.paymentSummaryValue}>₪{totalNumber.toLocaleString('he-IL')}</Text>
+            <Text style={styles.modalTitle}>הוסף תשלום</Text>
+            <Text style={styles.label}>סכום מלא (₪)</Text>
+            <TextInput
+              style={styles.input}
+              value={total}
+              onChangeText={setTotal}
+              keyboardType="numeric"
+              placeholder="0"
+              textAlign="right"
+            />
+            <Text style={styles.label}>סכום ששולם (₪)</Text>
+            <TextInput
+              style={styles.input}
+              value={paid}
+              onChangeText={setPaid}
+              keyboardType="numeric"
+              placeholder="0"
+              textAlign="right"
+            />
+            <Text style={styles.label}>אופן תשלום</Text>
+            <Pressable
+              onPress={() => setMethodOpen(o => !o)}
+              style={styles.select}
+            >
+              <Text style={styles.selectValue}>{method || 'בחרו אופן תשלום'}</Text>
+              <Text style={styles.selectCaret}>▾</Text>
+            </Pressable>
+            {methodOpen ? (
+              <View style={styles.selectList}>
+                {paymentOptions.map(option => (
+                  <Pressable
+                    key={option}
+                    style={[
+                      styles.selectItem,
+                      option === method && styles.selectItemActive,
+                    ]}
+                    onPress={() => {
+                      setMethod(option);
+                      setMethodOpen(false);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.selectItemText,
+                        option === method && styles.selectItemTextActive,
+                      ]}
+                    >
+                      {option}
+                    </Text>
+                  </Pressable>
+                ))}
               </View>
-              <View style={styles.paymentSummaryRow}>
-                <Text style={styles.paymentSummaryLabel}>שולם:</Text>
-                <Text style={styles.paymentSummaryValuePaid}>₪{totalPaidFromPayments.toLocaleString('he-IL')}</Text>
-              </View>
-              {remainingAmount > 0 && (
-                <View style={styles.paymentSummaryRow}>
-                  <Text style={styles.paymentSummaryLabel}>נותר:</Text>
-                  <Text style={styles.paymentSummaryValueRemaining}>₪{remainingAmount.toLocaleString('he-IL')}</Text>
-                </View>
-              )}
-              <View style={styles.progressBarEnhanced}>
-                <View
-                  style={[
-                    styles.progressFillEnhanced,
-                    { width: `${paidPercent}%`, backgroundColor: paidPercent === 100 ? '#10b981' : paidPercent >= 50 ? '#3b82f6' : '#f59e0b' },
-                  ]}
-                />
-              </View>
-              <Text style={styles.paymentProgressText}>{paidPercent}% מהסכום שולם</Text>
-            </View>
+            ) : null}
 
-            {/* Payments List */}
-            <View style={styles.paymentsListContainer}>
-              <Text style={styles.paymentsListTitle}>רשימת תשלומים</Text>
-              {payments.length === 0 ? (
-                <View style={styles.emptyPaymentsState}>
-                  <Text style={styles.emptyPaymentsText}>אין תשלומים עדיין</Text>
-                </View>
-              ) : (
-                <ScrollView style={styles.paymentsList} nestedScrollEnabled>
-                  {payments.map((payment) => (
-                    <View key={payment.id} style={styles.paymentItem}>
-                      <View style={styles.paymentItemContent}>
-                        <View style={styles.paymentItemRow}>
-                          <Text style={styles.paymentItemAmount}>₪{payment.amount.toLocaleString('he-IL')}</Text>
-                          <Pressable
-                            onPress={() => removePayment(payment.id)}
-                            style={styles.paymentItemDelete}
-                          >
-                            <Text style={styles.paymentItemDeleteText}>×</Text>
-                          </Pressable>
-                        </View>
-                        <View style={styles.paymentItemRow}>
-                          <Text style={styles.paymentItemMethod}>{payment.method}</Text>
-                          <Text style={styles.paymentItemDate}>{payment.date}</Text>
-                        </View>
-                      </View>
-                    </View>
-                  ))}
-                </ScrollView>
-              )}
-            </View>
-
-            {/* Add New Payment Section */}
-            <View style={styles.addPaymentSection}>
-              <Text style={styles.addPaymentSectionTitle}>הוסף תשלום חדש</Text>
-              <Text style={styles.label}>סכום (₪)</Text>
+            <Text style={styles.label}>הוסף תשלום נוסף (₪)</Text>
+            <View style={styles.addPaymentRow}>
               <TextInput
-                style={styles.input}
-                value={newPaymentAmount}
-                onChangeText={setNewPaymentAmount}
+                style={[styles.input, { flex: 1 }]}
+                value={addPayment}
+                onChangeText={setAddPayment}
                 keyboardType="numeric"
                 placeholder="0"
                 textAlign="right"
               />
-              <Text style={styles.label}>אופן תשלום</Text>
               <Pressable
-                onPress={() => setNewPaymentMethodOpen(o => !o)}
-                style={styles.select}
-              >
-                <Text style={styles.selectValue}>{newPaymentMethod || 'בחרו אופן תשלום'}</Text>
-                <Text style={styles.selectCaret}>▾</Text>
-              </Pressable>
-              {newPaymentMethodOpen ? (
-                <View style={styles.selectList}>
-                  {paymentOptions.map(option => (
-                    <Pressable
-                      key={option}
-                      style={[
-                        styles.selectItem,
-                        option === newPaymentMethod && styles.selectItemActive,
-                      ]}
-                      onPress={() => {
-                        setNewPaymentMethod(option);
-                        setNewPaymentMethodOpen(false);
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.selectItemText,
-                          option === newPaymentMethod && styles.selectItemTextActive,
-                        ]}
-                      >
-                        {option}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              ) : null}
-              <Pressable
-                onPress={addNewPayment}
+                onPress={addPaymentAmount}
                 style={({ pressed }) => [
-                  styles.addPaymentButton,
+                  styles.addPaymentTrigger,
+                  { minWidth: 90, paddingVertical: 10 },
                   pressed && { opacity: 0.9 },
                 ]}
               >
-                <Text style={styles.addPaymentButtonText}>הוסף תשלום</Text>
+                <Text style={styles.addPaymentText}>הוסף</Text>
               </Pressable>
+            </View>
+
+            <View style={styles.progressWrap}>
+              <View style={styles.progressHeader}>
+                <Text style={styles.progressLabel}>
+                  סכום מלא: ₪{totalNumber.toLocaleString('he-IL')}
+                </Text>
+                <Text style={styles.progressValue}>שולם {paidPercent}%</Text>
+              </View>
+              <View style={styles.progressBar}>
+                <View
+                  style={[
+                    styles.progressFill,
+                    { width: `${paidPercent}%` },
+                  ]}
+                />
+              </View>
             </View>
 
             <View style={styles.modalButtons}>
@@ -1691,13 +1517,12 @@ function OrderEditScreen({ order, onSave, onCancel }: OrderEditProps) {
                   pressed && { opacity: 0.9 },
                 ]}
               >
-                <Text style={styles.modalButtonText}>שמור</Text>
+                <Text style={styles.modalButtonText}>אישור</Text>
               </Pressable>
               <Pressable
                 onPress={() => {
                   setShowAddPayment(false);
-                  setNewPaymentAmount('');
-                  setNewPaymentMethod('');
+                  setAddPayment('');
                 }}
                 style={({ pressed }) => [
                   styles.modalButton,
@@ -1780,57 +1605,34 @@ function ExitInspectionsScreen({
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.inspectionsPageHeader}>
-          <Text style={styles.inspectionsPageTitle}>ביקורת יציאת אורח</Text>
-          <Text style={styles.inspectionsPageSubtitle}>
-            ניהול משימות ניקיון וביקורת לאחר עזיבת אורחים
-          </Text>
-        </View>
-
-        <View style={styles.inspectionsSummaryCard}>
-          <View style={styles.inspectionsSummaryHeader}>
-            <Text style={styles.inspectionsSummaryTitle}>סיכום מהיר</Text>
+        <View style={styles.inspectionsHeader}>
+          <View>
+            <Text style={styles.title}>ביקורת יציאת אורח</Text>
+            <Text style={styles.subtitle}>
+              ניהול משימות ניקיון וביקורת לאחר עזיבת אורחים
+            </Text>
           </View>
-          <View style={styles.inspectionsSummaryStatsRow}>
-            <View style={styles.inspectionsSummaryStatItem}>
-              <Text style={styles.inspectionsSummaryStatValue}>{missions.length}</Text>
-              <Text style={styles.inspectionsSummaryStatLabel}>משימות ביקורת</Text>
-            </View>
-            <View style={styles.inspectionsSummaryStatDivider} />
-            <View style={styles.inspectionsSummaryStatItem}>
-              <Text style={styles.inspectionsSummaryStatValue}>
-                {missions.filter(m => {
-                  const completed = m.tasks.filter(t => t.completed).length;
-                  return completed === m.tasks.length && m.tasks.length > 0;
-                }).length}
-              </Text>
-              <Text style={styles.inspectionsSummaryStatLabel}>הושלמו</Text>
-            </View>
-            <View style={styles.inspectionsSummaryStatDivider} />
-            <View style={styles.inspectionsSummaryStatItem}>
-              <Text style={styles.inspectionsSummaryStatValue}>
-                {missions.filter(m => {
-                  const completed = m.tasks.filter(t => t.completed).length;
-                  return completed > 0 && completed < m.tasks.length;
-                }).length}
-              </Text>
-              <Text style={styles.inspectionsSummaryStatLabel}>בביצוע</Text>
-            </View>
+          <View style={styles.statsBadge}>
+            <Text style={styles.statsBadgeText}>
+              {missions.length} משימות
+            </Text>
           </View>
         </View>
 
         {missions.length === 0 ? (
-          <View style={styles.emptyInspectionsState}>
-            <Text style={styles.emptyInspectionsText}>אין משימות ביקורת כרגע</Text>
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>אין משימות ביקורת כרגע</Text>
           </View>
         ) : (
-          missions.map(mission => (
-            <InspectionMissionCard
-              key={mission.id}
-              mission={mission}
-              onToggleTask={toggleTask}
-            />
-          ))
+          <View style={styles.missionsList}>
+            {missions.map(mission => (
+                <InspectionMissionCard
+                  key={mission.id}
+                  mission={mission}
+                  onToggleTask={toggleTask}
+                />
+            ))}
+          </View>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -1885,77 +1687,61 @@ function InspectionMissionCard({
   const displayStatus = getDisplayStatus();
   const statusColor = getStatusColor(displayStatus);
 
-  const getStatusBadgeColors = () => {
-    if (displayStatus === 'ביקורת הושלמה') {
-      return { bg: '#d1fae5', border: '#10b981', text: '#065f46' };
-    }
-    if (displayStatus === 'מחכה לביקורת') {
-      return { bg: '#fef3c7', border: '#f59e0b', text: '#92400e' };
-    }
-    return { bg: '#f3f4f6', border: '#9ca3af', text: '#374151' };
-  };
-
-  const statusBadgeColors = getStatusBadgeColors();
-
   return (
-    <View style={[styles.card, styles.inspectionCardEnhanced]}>
-      {/* Header with Unit and Status */}
-      <Pressable
-        onPress={() => setExpanded(!expanded)}
-        style={styles.inspectionCardHeaderPressable}
-      >
-        <View style={styles.inspectionCardHeaderEnhanced}>
-          <View style={styles.inspectionCardHeaderLeft}>
-            <View style={styles.inspectionCardTitleContainer}>
-              <Text style={styles.inspectionCardUnitTitle}>{mission.unitNumber}</Text>
-              <Text style={styles.inspectionCardId}>#{mission.id}</Text>
+    <Pressable
+      onPress={() => setExpanded(!expanded)}
+      style={({ pressed }) => [
+        styles.card,
+        styles.inspectionCard,
+        pressed && { opacity: 0.95 },
+      ]}
+    >
+      <View style={styles.inspectionHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.cardTitle}>{mission.unitNumber}</Text>
+          <Text style={styles.cardLine}>אורח: {mission.guestName}</Text>
+          <Text style={styles.cardLine}>תאריך ביקורת: {mission.departureDate}</Text>
+          <View style={styles.statusRow}>
+            <Text style={styles.statusLabel}>סטטוס:</Text>
+            <View
+              style={[
+                styles.statusDisplayBadge,
+                { backgroundColor: statusColor + '22', borderColor: statusColor + '55' },
+              ]}
+            >
+              <Text style={[styles.statusDisplayText, { color: statusColor }]}>
+                {displayStatus}
+              </Text>
             </View>
           </View>
-          <View style={[styles.inspectionStatusBadgeEnhanced, { backgroundColor: statusBadgeColors.bg, borderColor: statusBadgeColors.border }]}>
-            <Text style={[styles.inspectionStatusBadgeTextEnhanced, { color: statusBadgeColors.text }]}>
-              {displayStatus}
-            </Text>
-          </View>
-        </View>
-      </Pressable>
-
-      {/* Date Info */}
-      <View style={styles.inspectionDateSection}>
-        <View style={styles.inspectionDateCard}>
-          <Text style={styles.inspectionDateLabel}>תאריך ביקורת</Text>
-          <Text style={styles.inspectionDateValue}>{mission.departureDate}</Text>
         </View>
       </View>
 
-      {/* Progress Section */}
-      <View style={styles.inspectionProgressSection}>
-        <View style={styles.inspectionProgressHeader}>
-          <Text style={styles.inspectionProgressLabel}>התקדמות ביקורת</Text>
-          <Text style={styles.inspectionProgressValue}>{Math.round(progressPercent)}%</Text>
-        </View>
-        <View style={styles.inspectionProgressBar}>
-          <View
-            style={[
-              styles.inspectionProgressFill,
-              { 
-                width: `${progressPercent}%`,
-                backgroundColor: progressPercent === 100 ? '#10b981' : progressPercent >= 50 ? '#3b82f6' : '#f59e0b'
-              },
-            ]}
-          />
-        </View>
-        <View style={styles.inspectionProgressFooter}>
-          <Text style={styles.inspectionProgressFooterText}>
-            {completedTasks} מתוך {totalTasks} משימות הושלמו
-          </Text>
-        </View>
-      </View>
-
-      {/* Tasks List - Expanded */}
       {expanded && (
-        <View style={styles.inspectionTasksSection}>
-          <Text style={styles.inspectionTasksTitle}>רשימת משימות</Text>
-          <View style={styles.inspectionTasksList}>
+        <>
+          <View style={styles.inspectionDivider} />
+
+          <View style={styles.progressWrap}>
+            <View style={styles.progressHeader}>
+              <Text style={styles.progressLabel}>
+                משימות: {completedTasks} / {totalTasks}
+              </Text>
+              <Text style={styles.progressValue}>
+                {Math.round(progressPercent)}%
+              </Text>
+            </View>
+            <View style={styles.progressBar}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${progressPercent}%` },
+                ]}
+              />
+            </View>
+          </View>
+
+          <View style={styles.tasksList}>
+            <Text style={styles.tasksTitle}>רשימת משימות:</Text>
             {mission.tasks.map(task => (
               <Pressable
                 key={task.id}
@@ -1963,20 +1749,20 @@ function InspectionMissionCard({
                   e.stopPropagation();
                   onToggleTask(mission.id, task.id);
                 }}
-                style={styles.inspectionTaskItem}
+                style={styles.taskItem}
               >
                 <View
                   style={[
-                    styles.inspectionTaskCheckbox,
-                    task.completed && styles.inspectionTaskCheckboxCompleted,
+                    styles.taskCheckbox,
+                    task.completed && styles.taskCheckboxCompleted,
                   ]}
                 >
-                  {task.completed && <Text style={styles.inspectionTaskCheckmark}>✓</Text>}
+                  {task.completed && <Text style={styles.taskCheckmark}>✓</Text>}
                 </View>
                 <Text
                   style={[
-                    styles.inspectionTaskText,
-                    task.completed && styles.inspectionTaskTextCompleted,
+                    styles.taskText,
+                    task.completed && styles.taskTextCompleted,
                   ]}
                 >
                   {task.name}
@@ -1984,297 +1770,9 @@ function InspectionMissionCard({
               </Pressable>
             ))}
           </View>
-        </View>
+        </>
       )}
-
-      {/* Expand/Collapse Button */}
-      <Pressable
-        onPress={() => setExpanded(!expanded)}
-        style={styles.inspectionExpandButton}
-      >
-        <Text style={styles.inspectionExpandButtonText}>
-          {expanded ? 'הסתר משימות' : 'הצג משימות'}
-        </Text>
-      </Pressable>
-    </View>
-  );
-}
-
-// Reports Screens
-type ReportsScreenProps = {
-  onBack: () => void;
-  onSelectReport: (reportType: 'employeeHours' | 'revenue' | 'expenses' | 'cleaning') => void;
-  safeAreaInsets: { top: number };
-  statusBar: React.ReactElement;
-};
-
-function ReportsScreen({ onBack, onSelectReport, safeAreaInsets, statusBar }: ReportsScreenProps) {
-  return (
-    <SafeAreaView style={[styles.container, { paddingTop: safeAreaInsets.top }]}>
-      {statusBar}
-      <View style={styles.ordersHeader}>
-        <Pressable onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backButtonText}>← חזרה</Text>
-        </Pressable>
-      </View>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.reportsPageHeader}>
-          <Text style={styles.reportsPageTitle}>דוחות</Text>
-          <Text style={styles.reportsPageSubtitle}>
-            צפייה וניהול דוחות מערכת
-          </Text>
-        </View>
-
-        <View style={styles.reportsGrid}>
-          <Pressable
-            style={styles.reportCard}
-            onPress={() => onSelectReport('employeeHours')}
-          >
-            <View style={[styles.reportCardIcon, { backgroundColor: '#dbeafe' }]}>
-              <Text style={styles.reportCardIconText}>שעון</Text>
-            </View>
-            <Text style={styles.reportCardTitle}>דוח עובדים שעתי</Text>
-            <Text style={styles.reportCardDescription}>
-              צפייה בשעות עבודה ועלויות עובדים
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={styles.reportCard}
-            onPress={() => onSelectReport('revenue')}
-          >
-            <View style={[styles.reportCardIcon, { backgroundColor: '#dcfce7' }]}>
-              <Text style={styles.reportCardIconText}>הכנסות</Text>
-            </View>
-            <Text style={styles.reportCardTitle}>דוח הכנסות</Text>
-            <Text style={styles.reportCardDescription}>
-              סיכום הכנסות מתשלומי אורחים
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={styles.reportCard}
-            onPress={() => onSelectReport('expenses')}
-          >
-            <View style={[styles.reportCardIcon, { backgroundColor: '#fee2e2' }]}>
-              <Text style={styles.reportCardIconText}>הוצאות</Text>
-            </View>
-            <Text style={styles.reportCardTitle}>דוח הוצאות</Text>
-            <Text style={styles.reportCardDescription}>
-              סיכום הוצאות ותשלומים
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={styles.reportCard}
-            onPress={() => onSelectReport('cleaning')}
-          >
-            <View style={[styles.reportCardIcon, { backgroundColor: '#fef3c7' }]}>
-              <Text style={styles.reportCardIconText}>ניקיון</Text>
-            </View>
-            <Text style={styles.reportCardTitle}>דוח נקיונות</Text>
-            <Text style={styles.reportCardDescription}>
-              סיכום ביקורות ניקיון ומשימות
-            </Text>
-          </Pressable>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-type EmployeeHoursReportScreenProps = {
-  onBack: () => void;
-  safeAreaInsets: { top: number };
-  statusBar: React.ReactElement;
-};
-
-function EmployeeHoursReportScreen({ onBack, safeAreaInsets, statusBar }: EmployeeHoursReportScreenProps) {
-  return (
-    <SafeAreaView style={[styles.container, { paddingTop: safeAreaInsets.top }]}>
-      {statusBar}
-      <View style={styles.ordersHeader}>
-        <Pressable onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backButtonText}>← חזרה</Text>
-        </Pressable>
-      </View>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.title}>דוח עובדים שעתי</Text>
-        <Text style={styles.subtitle}>
-          צפייה בשעות עבודה ועלויות עובדים
-        </Text>
-        <View style={styles.card}>
-          <Text style={styles.emptyStateText}>דוח זה יפותח בהמשך</Text>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-type RevenueReportScreenProps = {
-  orders: Order[];
-  onBack: () => void;
-  safeAreaInsets: { top: number };
-  statusBar: React.ReactElement;
-};
-
-function RevenueReportScreen({ orders, onBack, safeAreaInsets, statusBar }: RevenueReportScreenProps) {
-  const totalRevenue = orders.reduce((sum, o) => sum + o.totalAmount, 0);
-  const totalPaid = orders.reduce((sum, o) => sum + o.paidAmount, 0);
-  const pendingAmount = totalRevenue - totalPaid;
-
-  return (
-    <SafeAreaView style={[styles.container, { paddingTop: safeAreaInsets.top }]}>
-      {statusBar}
-      <View style={styles.ordersHeader}>
-        <Pressable onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backButtonText}>← חזרה</Text>
-        </Pressable>
-      </View>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.title}>דוח הכנסות</Text>
-        <Text style={styles.subtitle}>
-          סיכום הכנסות מתשלומי אורחים
-        </Text>
-
-        <View style={styles.reportSummaryCard}>
-          <View style={styles.reportSummaryRow}>
-            <Text style={styles.reportSummaryLabel}>סכום כולל:</Text>
-            <Text style={styles.reportSummaryValue}>₪{totalRevenue.toLocaleString('he-IL')}</Text>
-          </View>
-          <View style={styles.reportSummaryRow}>
-            <Text style={styles.reportSummaryLabel}>שולם:</Text>
-            <Text style={styles.reportSummaryValuePaid}>₪{totalPaid.toLocaleString('he-IL')}</Text>
-          </View>
-          <View style={styles.reportSummaryRow}>
-            <Text style={styles.reportSummaryLabel}>ממתין לתשלום:</Text>
-            <Text style={styles.reportSummaryValuePending}>₪{pendingAmount.toLocaleString('he-IL')}</Text>
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>פירוט לפי הזמנות</Text>
-          {orders.map(order => (
-            <View key={order.id} style={styles.reportItem}>
-              <View style={styles.reportItemRow}>
-                <Text style={styles.reportItemLabel}>{order.unitNumber}</Text>
-                <Text style={styles.reportItemValue}>₪{order.totalAmount.toLocaleString('he-IL')}</Text>
-              </View>
-              <Text style={styles.reportItemSubtext}>
-                שולם: ₪{order.paidAmount.toLocaleString('he-IL')} | נותר: ₪{(order.totalAmount - order.paidAmount).toLocaleString('he-IL')}
-              </Text>
-            </View>
-          ))}
-        </View>
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-type ExpensesReportScreenProps = {
-  onBack: () => void;
-  safeAreaInsets: { top: number };
-  statusBar: React.ReactElement;
-};
-
-function ExpensesReportScreen({ onBack, safeAreaInsets, statusBar }: ExpensesReportScreenProps) {
-  return (
-    <SafeAreaView style={[styles.container, { paddingTop: safeAreaInsets.top }]}>
-      {statusBar}
-      <View style={styles.ordersHeader}>
-        <Pressable onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backButtonText}>← חזרה</Text>
-        </Pressable>
-      </View>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.title}>דוח הוצאות</Text>
-        <Text style={styles.subtitle}>
-          סיכום הוצאות ותשלומים
-        </Text>
-        <View style={styles.card}>
-          <Text style={styles.emptyStateText}>דוח זה יפותח בהמשך</Text>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-type CleaningReportScreenProps = {
-  missions: InspectionMission[];
-  onBack: () => void;
-  safeAreaInsets: { top: number };
-  statusBar: React.ReactElement;
-};
-
-function CleaningReportScreen({ missions, onBack, safeAreaInsets, statusBar }: CleaningReportScreenProps) {
-  const completedMissions = missions.filter(m => {
-    const completed = m.tasks.filter(t => t.completed).length;
-    return completed === m.tasks.length && m.tasks.length > 0;
-  }).length;
-  const inProgressMissions = missions.filter(m => {
-    const completed = m.tasks.filter(t => t.completed).length;
-    return completed > 0 && completed < m.tasks.length;
-  }).length;
-  const pendingMissions = missions.filter(m => {
-    const completed = m.tasks.filter(t => t.completed).length;
-    return completed === 0;
-  }).length;
-
-  return (
-    <SafeAreaView style={[styles.container, { paddingTop: safeAreaInsets.top }]}>
-      {statusBar}
-      <View style={styles.ordersHeader}>
-        <Pressable onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backButtonText}>← חזרה</Text>
-        </Pressable>
-      </View>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.title}>דוח נקיונות</Text>
-        <Text style={styles.subtitle}>
-          סיכום ביקורות ניקיון ומשימות
-        </Text>
-
-        <View style={styles.reportSummaryCard}>
-          <View style={styles.reportSummaryRow}>
-            <Text style={styles.reportSummaryLabel}>סה״כ ביקורות:</Text>
-            <Text style={styles.reportSummaryValue}>{missions.length}</Text>
-          </View>
-          <View style={styles.reportSummaryRow}>
-            <Text style={styles.reportSummaryLabel}>הושלמו:</Text>
-            <Text style={styles.reportSummaryValuePaid}>{completedMissions}</Text>
-          </View>
-          <View style={styles.reportSummaryRow}>
-            <Text style={styles.reportSummaryLabel}>בביצוע:</Text>
-            <Text style={styles.reportSummaryValuePending}>{inProgressMissions}</Text>
-          </View>
-          <View style={styles.reportSummaryRow}>
-            <Text style={styles.reportSummaryLabel}>ממתינות:</Text>
-            <Text style={styles.reportSummaryValuePending}>{pendingMissions}</Text>
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>פירוט לפי יחידות</Text>
-          {missions.map(mission => {
-            const completed = mission.tasks.filter(t => t.completed).length;
-            const total = mission.tasks.length;
-            return (
-              <View key={mission.id} style={styles.reportItem}>
-                <View style={styles.reportItemRow}>
-                  <Text style={styles.reportItemLabel}>{mission.unitNumber}</Text>
-                  <Text style={styles.reportItemValue}>
-                    {total > 0 ? Math.round((completed / total) * 100) : 0}%
-                  </Text>
-                </View>
-                <Text style={styles.reportItemSubtext}>
-                  {completed} מתוך {total} משימות הושלמו
-                </Text>
-              </View>
-            );
-          })}
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+    </Pressable>
   );
 }
 
@@ -2305,334 +1803,6 @@ function OutlineButton({ label, onPress, style }: ButtonProps) {
     >
       <Text style={styles.outlineButtonText}>{label}</Text>
     </Pressable>
-  );
-}
-
-// Warehouse Main Screen
-type WarehouseMainScreenProps = {
-  onBack: () => void;
-  onSelectOption: (option: 'orders' | 'inventory') => void;
-  safeAreaInsets: { top: number };
-  statusBar: React.ReactElement;
-};
-
-function WarehouseMainScreen({ onBack, onSelectOption, safeAreaInsets, statusBar }: WarehouseMainScreenProps) {
-  return (
-    <SafeAreaView style={[styles.container, { paddingTop: safeAreaInsets.top }]}>
-      {statusBar}
-      <View style={styles.ordersHeader}>
-        <Pressable onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backButtonText}>← חזרה</Text>
-        </Pressable>
-      </View>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.warehouseMainHeader}>
-          <Text style={styles.warehouseMainTitle}>מחסן</Text>
-          <Text style={styles.warehouseMainSubtitle}>
-            ניהול הזמנות ומלאי
-          </Text>
-        </View>
-
-        <View style={styles.warehouseMainOptions}>
-          <Pressable
-            style={styles.warehouseMainOptionCard}
-            onPress={() => onSelectOption('orders')}
-          >
-            <View style={[styles.warehouseMainOptionIcon, { backgroundColor: '#dbeafe' }]}>
-              <Text style={styles.warehouseMainOptionIconText}>הזמנות</Text>
-            </View>
-            <Text style={styles.warehouseMainOptionTitle}>הזמנות</Text>
-            <Text style={styles.warehouseMainOptionDescription}>
-              ניהול הזמנות פנימיות למלאי וצפייה בסטטוס
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={styles.warehouseMainOptionCard}
-            onPress={() => onSelectOption('inventory')}
-          >
-            <View style={[styles.warehouseMainOptionIcon, { backgroundColor: '#dcfce7' }]}>
-              <Text style={styles.warehouseMainOptionIconText}>מלאי</Text>
-            </View>
-            <Text style={styles.warehouseMainOptionTitle}>מלאי</Text>
-            <Text style={styles.warehouseMainOptionDescription}>
-              צפייה במלאי בכל מחסן וניהול פריטים
-            </Text>
-          </Pressable>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-// Warehouse Inventory List Screen
-type WarehouseInventoryListScreenProps = {
-  onBack: () => void;
-  onSelectWarehouse: (warehouse: string) => void;
-  safeAreaInsets: { top: number };
-  statusBar: React.ReactElement;
-};
-
-function WarehouseInventoryListScreen({
-  onBack,
-  onSelectWarehouse,
-  safeAreaInsets,
-  statusBar,
-}: WarehouseInventoryListScreenProps) {
-  const warehouses = ['מחסן ראשי', 'מחסן יחידה 1', 'מחסן יחידה 2', 'מחסן יחידה 3', 'מחסן קוטג׳ 1', 'מחסן קוטג׳ 2'];
-
-  return (
-    <SafeAreaView style={[styles.container, { paddingTop: safeAreaInsets.top }]}>
-      {statusBar}
-      <View style={styles.ordersHeader}>
-        <Pressable onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backButtonText}>← חזרה</Text>
-        </Pressable>
-      </View>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.warehouseInventoryListHeader}>
-          <Text style={styles.warehouseInventoryListTitle}>מלאי</Text>
-          <Text style={styles.warehouseInventoryListSubtitle}>
-            בחר מחסן לצפייה ועריכה
-          </Text>
-        </View>
-
-        <View style={styles.warehouseList}>
-          {warehouses.map(warehouse => (
-            <Pressable
-              key={warehouse}
-              style={styles.warehouseListItem}
-              onPress={() => onSelectWarehouse(warehouse)}
-            >
-              <View style={styles.warehouseListItemIcon}>
-                <Text style={styles.warehouseListItemIconText}>מחסן</Text>
-              </View>
-              <View style={styles.warehouseListItemContent}>
-                <Text style={styles.warehouseListItemTitle}>{warehouse}</Text>
-                <Text style={styles.warehouseListItemSubtext}>לחץ לצפייה ועריכה</Text>
-              </View>
-              <Text style={styles.warehouseListItemArrow}>›</Text>
-            </Pressable>
-          ))}
-        </View>
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-// Warehouse Inventory Screen (specific warehouse)
-type WarehouseInventoryScreenProps = {
-  warehouseName: string;
-  items: InventoryItem[];
-  onUpdateItems: (items: InventoryItem[]) => void;
-  onBack: () => void;
-  onEditItem: (itemId: string) => void;
-  safeAreaInsets: { top: number };
-  statusBar: React.ReactElement;
-};
-
-function WarehouseInventoryScreen({
-  warehouseName,
-  items,
-  onUpdateItems,
-  onBack,
-  onEditItem,
-  safeAreaInsets,
-  statusBar,
-}: WarehouseInventoryScreenProps) {
-  const itemsByCategory = items.reduce((acc, item) => {
-    if (!acc[item.category]) {
-      acc[item.category] = [];
-    }
-    acc[item.category].push(item);
-    return acc;
-  }, {} as Record<string, InventoryItem[]>);
-
-  return (
-    <SafeAreaView style={[styles.container, { paddingTop: safeAreaInsets.top }]}>
-      {statusBar}
-      <View style={styles.ordersHeader}>
-        <Pressable onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backButtonText}>← חזרה</Text>
-        </Pressable>
-      </View>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.warehouseHeader}>
-          <View>
-            <Text style={styles.title}>{warehouseName}</Text>
-            <Text style={styles.subtitle}>
-              צפייה ועריכה של המלאי
-            </Text>
-          </View>
-        </View>
-
-        {Object.entries(itemsByCategory).map(([category, categoryItems]) => (
-          <View key={category} style={styles.categorySection}>
-            <Text style={styles.categoryTitle}>{category}</Text>
-            <View style={styles.itemsGrid}>
-              {categoryItems.map(item => (
-                <Pressable
-                  key={item.id}
-                  style={({ pressed }) => [
-                    styles.inventoryCard,
-                    styles.inventoryCardPressable,
-                    item.currentStock <= item.minStock && styles.inventoryCardLowStock,
-                    pressed && styles.inventoryCardPressed,
-                  ]}
-                  onPress={() => onEditItem(item.id)}
-                >
-                  <View style={styles.inventoryCardHeader}>
-                    <Text style={styles.inventoryItemName}>{item.name}</Text>
-                    {item.currentStock <= item.minStock && (
-                      <View style={styles.lowStockBadge}>
-                        <Text style={styles.lowStockBadgeText}>נמוך</Text>
-                      </View>
-                    )}
-                  </View>
-                  <View style={styles.inventoryCardBody}>
-                    <View style={styles.inventoryStockRow}>
-                      <Text style={styles.inventoryStockLabel}>מלאי נוכחי:</Text>
-                      <Text style={styles.inventoryStockValue}>
-                        {item.currentStock} {item.unit}
-                      </Text>
-                    </View>
-                    <View style={styles.inventoryStockRow}>
-                      <Text style={styles.inventoryStockLabel}>מינימום:</Text>
-                      <Text style={styles.inventoryStockValue}>
-                        {item.minStock} {item.unit}
-                      </Text>
-                    </View>
-                    {item.currentStock <= item.minStock && (
-                      <View style={styles.inventoryAlertBadge}>
-                        <Text style={styles.inventoryAlertText}>
-                          צריך להזמין!
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                  <View style={styles.inventoryCardFooter}>
-                    <Text style={styles.inventoryCardEditHint}>לחץ לעריכה ›</Text>
-                  </View>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        ))}
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-// Warehouse Inventory Edit Screen
-type WarehouseInventoryEditScreenProps = {
-  item: InventoryItem;
-  onSave: (item: InventoryItem) => void;
-  onCancel: () => void;
-  safeAreaInsets: { top: number };
-  statusBar: React.ReactElement;
-};
-
-function WarehouseInventoryEditScreen({
-  item,
-  onSave,
-  onCancel,
-  safeAreaInsets,
-  statusBar,
-}: WarehouseInventoryEditScreenProps) {
-  const [currentStock, setCurrentStock] = useState(item.currentStock.toString());
-  const [minStock, setMinStock] = useState(item.minStock.toString());
-
-  const handleSave = () => {
-    const currentStockNum = Number(currentStock);
-    const minStockNum = Number(minStock);
-    
-    if (Number.isNaN(currentStockNum) || currentStockNum < 0) {
-      Alert.alert('שגיאה', 'מלאי נוכחי חייב להיות מספר חיובי');
-      return;
-    }
-    if (Number.isNaN(minStockNum) || minStockNum < 0) {
-      Alert.alert('שגיאה', 'מינימום מלאי חייב להיות מספר חיובי');
-      return;
-    }
-
-    onSave({
-      ...item,
-      currentStock: currentStockNum,
-      minStock: minStockNum,
-    });
-  };
-
-  return (
-    <SafeAreaView style={[styles.container, { paddingTop: safeAreaInsets.top }]}>
-      {statusBar}
-      <View style={styles.ordersHeader}>
-        <Pressable onPress={onCancel} style={styles.backButton}>
-          <Text style={styles.backButtonText}>← חזרה</Text>
-        </Pressable>
-      </View>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.warehouseHeader}>
-          <View>
-            <Text style={styles.title}>עריכת מלאי</Text>
-            <Text style={styles.subtitle}>
-              {item.name}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <View style={styles.inventoryEditItemInfo}>
-            <Text style={styles.inventoryEditItemName}>{item.name}</Text>
-            <Text style={styles.inventoryEditItemCategory}>{item.category}</Text>
-          </View>
-
-          <View style={styles.inventoryEditFields}>
-            <View style={styles.inventoryEditField}>
-              <Text style={styles.inventoryEditFieldLabel}>מלאי נוכחי</Text>
-              <View style={styles.inventoryEditFieldRow}>
-                <TextInput
-                  style={styles.inventoryEditInput}
-                  value={currentStock}
-                  onChangeText={setCurrentStock}
-                  keyboardType="numeric"
-                  placeholder="0"
-                  textAlign="right"
-                />
-                <Text style={styles.inventoryEditUnit}>{item.unit}</Text>
-              </View>
-            </View>
-
-            <View style={styles.inventoryEditField}>
-              <Text style={styles.inventoryEditFieldLabel}>מינימום מלאי</Text>
-              <View style={styles.inventoryEditFieldRow}>
-                <TextInput
-                  style={styles.inventoryEditInput}
-                  value={minStock}
-                  onChangeText={setMinStock}
-                  keyboardType="numeric"
-                  placeholder="0"
-                  textAlign="right"
-                />
-                <Text style={styles.inventoryEditUnit}>{item.unit}</Text>
-              </View>
-            </View>
-
-            {Number(currentStock) <= Number(minStock) && Number(currentStock) >= 0 && Number(minStock) >= 0 && (
-              <View style={styles.inventoryEditWarning}>
-                <Text style={styles.inventoryEditWarningText}>
-                  המלאי הנוכחי נמוך או שווה למינימום - צריך להזמין!
-                </Text>
-              </View>
-            )}
-          </View>
-
-          <View style={styles.editActions}>
-            <PrimaryButton label="שמירה" onPress={handleSave} />
-            <OutlineButton label="ביטול" onPress={onCancel} />
-          </View>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
   );
 }
 
@@ -2672,8 +1842,6 @@ function WarehouseScreen({
   statusBar,
   userName,
 }: WarehouseScreenProps) {
-  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
-  const [editingOrderItems, setEditingOrderItems] = useState<{ itemId: string; quantity: number }[]>([]);
 
   const handleToggleOrder = (orderId: string) => {
     if (expandedOrderId === orderId) {
@@ -3131,9 +2299,9 @@ function MaintenanceScreen({
                 style={styles.unitCard}
               >
                 <View style={styles.unitCardHeader}>
-                  <View style={styles.unitIconMaintenanceContainer}>
+                  <View style={styles.unitIcon}>
                     <Text style={styles.unitIconText}>
-                      {unit.type === 'יחידה' ? 'יחידה' : 'קוטג׳'}
+                      {unit.type === 'יחידה' ? '🏠' : '🏡'}
                     </Text>
                   </View>
                   <View style={{ flex: 1 }}>
@@ -3508,7 +2676,7 @@ function MaintenanceTaskDetailScreen({
             <View style={styles.modalButtons}>
               <Pressable
                 onPress={handleConfirmClose}
-                style={[styles.modalButton, { backgroundColor: '#2563eb' }]}
+                style={[styles.modalButton, styles.modalButtonPrimary]}
               >
                 <Text style={styles.modalButtonText}>אישור וסגירה</Text>
               </Pressable>
@@ -4959,14 +4127,6 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
   },
-  inventoryCardPressable: {
-    borderWidth: 2,
-    borderColor: '#3b82f6',
-  },
-  inventoryCardPressed: {
-    opacity: 0.7,
-    transform: [{ scale: 0.98 }],
-  },
   inventoryCardLowStock: {
     borderColor: '#fecaca',
     backgroundColor: '#fef2f2',
@@ -5054,7 +4214,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 14,
   },
-  orderCardWarehouse: {
+  orderCard: {
     backgroundColor: '#fff',
     borderRadius: 14,
     padding: 14,
@@ -5311,7 +4471,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  unitIconMaintenanceContainer: {
+  unitIcon: {
     width: 56,
     height: 56,
     borderRadius: 28,
@@ -5565,6 +4725,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     justifyContent: 'space-between',
   },
+  progressLabel: {
+    color: '#0f172a',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  progressValue: {
+    color: '#2563eb',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  progressBar: {
+    height: 10,
+    backgroundColor: '#e2e8f0',
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#2563eb',
+  },
   editActions: {
     marginTop: 16,
     gap: 10,
@@ -5635,872 +4815,6 @@ const styles = StyleSheet.create({
   modalButtonGhostText: {
     color: '#0f172a',
     fontWeight: '800',
-  },
-  // Payment Management Styles
-  paymentSummaryCard: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  paymentSummaryRow: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  paymentSummaryLabel: {
-    fontSize: 14,
-    color: '#64748b',
-    fontWeight: '600',
-  },
-  paymentSummaryValue: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#0f172a',
-  },
-  paymentSummaryValuePaid: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#10b981',
-  },
-  paymentSummaryValueRemaining: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#f59e0b',
-  },
-  paymentProgressText: {
-    fontSize: 12,
-    color: '#64748b',
-    textAlign: 'center',
-    marginTop: 8,
-    fontWeight: '600',
-  },
-  paymentsListContainer: {
-    marginBottom: 16,
-    maxHeight: 200,
-  },
-  paymentsListTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0f172a',
-    marginBottom: 12,
-    textAlign: 'right',
-  },
-  paymentsList: {
-    maxHeight: 200,
-  },
-  emptyPaymentsState: {
-    padding: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyPaymentsText: {
-    fontSize: 14,
-    color: '#94a3b8',
-    textAlign: 'center',
-  },
-  paymentItem: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  paymentItemContent: {
-    gap: 6,
-  },
-  paymentItemRow: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  paymentItemAmount: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#0f172a',
-  },
-  paymentItemDelete: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#fee2e2',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  paymentItemDeleteText: {
-    fontSize: 18,
-    color: '#ef4444',
-    fontWeight: '800',
-    lineHeight: 20,
-  },
-  paymentItemMethod: {
-    fontSize: 13,
-    color: '#64748b',
-    fontWeight: '600',
-  },
-  paymentItemDate: {
-    fontSize: 12,
-    color: '#94a3b8',
-  },
-  addPaymentSection: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
-  },
-  addPaymentSectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0f172a',
-    marginBottom: 12,
-    textAlign: 'right',
-  },
-  addPaymentButton: {
-    backgroundColor: '#10b981',
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 12,
-    shadowColor: '#10b981',
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-  },
-  addPaymentButtonText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 15,
-  },
-  // Enhanced Inspections Screen Styles
-  inspectionsPageHeader: {
-    marginBottom: 8,
-  },
-  inspectionsPageTitle: {
-    fontSize: 32,
-    fontWeight: '800',
-    textAlign: 'right',
-    color: '#0f172a',
-    marginBottom: 6,
-  },
-  inspectionsPageSubtitle: {
-    fontSize: 16,
-    textAlign: 'right',
-    color: '#64748b',
-    marginBottom: 4,
-  },
-  inspectionsSummaryCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 20,
-    marginTop: 20,
-    borderWidth: 2,
-    borderColor: '#3b82f6',
-    shadowColor: '#3b82f6',
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    marginBottom: 8,
-  },
-  inspectionsSummaryHeader: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    marginBottom: 16,
-    gap: 10,
-  },
-  inspectionsSummaryTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    textAlign: 'right',
-    color: '#0f172a',
-  },
-  inspectionsSummaryStatsRow: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingVertical: 16,
-  },
-  inspectionsSummaryStatItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  inspectionsSummaryStatValue: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#0f172a',
-    marginBottom: 4,
-  },
-  inspectionsSummaryStatLabel: {
-    fontSize: 13,
-    color: '#64748b',
-    fontWeight: '600',
-  },
-  inspectionsSummaryStatDivider: {
-    width: 1,
-    height: 50,
-    backgroundColor: '#e2e8f0',
-  },
-  emptyInspectionsState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: 20,
-  },
-  emptyInspectionsText: {
-    fontSize: 18,
-    color: '#64748b',
-    fontWeight: '600',
-  },
-  // Enhanced Inspection Card Styles
-  inspectionCardEnhanced: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 20,
-    marginTop: 16,
-    borderWidth: 2,
-    borderColor: '#e2e8f0',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    marginBottom: 4,
-  },
-  inspectionCardHeaderPressable: {
-    marginBottom: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 2,
-    borderBottomColor: '#f1f5f9',
-  },
-  inspectionCardHeaderEnhanced: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  inspectionCardHeaderLeft: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    flex: 1,
-    gap: 12,
-  },
-  inspectionUnitIconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#eff6ff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#3b82f6',
-  },
-  inspectionUnitIcon: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#3b82f6',
-  },
-  inspectionCardTitleContainer: {
-    flex: 1,
-  },
-  inspectionCardUnitTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    textAlign: 'right',
-    color: '#0f172a',
-    marginBottom: 4,
-  },
-  inspectionCardId: {
-    fontSize: 13,
-    textAlign: 'right',
-    color: '#64748b',
-    fontWeight: '600',
-  },
-  inspectionStatusBadgeEnhanced: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 2,
-  },
-  inspectionStatusBadgeTextEnhanced: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  inspectionInfoSection: {
-    marginBottom: 16,
-  },
-  inspectionInfoRow: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    gap: 16,
-  },
-  inspectionInfoContent: {
-    flex: 1,
-  },
-  inspectionInfoLabel: {
-    fontSize: 12,
-    color: '#64748b',
-    textAlign: 'right',
-    marginBottom: 4,
-    fontWeight: '600',
-  },
-  inspectionInfoValue: {
-    fontSize: 15,
-    color: '#0f172a',
-    textAlign: 'right',
-    fontWeight: '700',
-  },
-  inspectionDateSection: {
-    marginBottom: 20,
-  },
-  inspectionDateCard: {
-    backgroundColor: '#f0f9ff',
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 2,
-    borderColor: '#3b82f6',
-    alignItems: 'center',
-    shadowColor: '#3b82f6',
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-  },
-  inspectionDateLabel: {
-    fontSize: 14,
-    color: '#64748b',
-    textAlign: 'center',
-    marginBottom: 8,
-    fontWeight: '600',
-  },
-  inspectionDateValue: {
-    fontSize: 28,
-    color: '#0f172a',
-    textAlign: 'center',
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  inspectionProgressSection: {
-    marginTop: 20,
-    paddingTop: 20,
-    borderTopWidth: 2,
-    borderTopColor: '#f1f5f9',
-  },
-  inspectionProgressHeader: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  inspectionProgressLabel: {
-    color: '#0f172a',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  inspectionProgressValue: {
-    color: '#2563eb',
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  inspectionProgressBar: {
-    height: 12,
-    backgroundColor: '#e2e8f0',
-    borderRadius: 999,
-    overflow: 'hidden',
-    marginBottom: 8,
-  },
-  inspectionProgressFill: {
-    height: '100%',
-    borderRadius: 999,
-  },
-  inspectionProgressFooter: {
-    alignItems: 'center',
-  },
-  inspectionProgressFooterText: {
-    fontSize: 12,
-    color: '#64748b',
-    fontWeight: '600',
-  },
-  inspectionTasksSection: {
-    marginTop: 20,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
-  },
-  inspectionTasksTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0f172a',
-    textAlign: 'right',
-    marginBottom: 12,
-  },
-  inspectionTasksList: {
-    gap: 8,
-  },
-  inspectionTaskItem: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    backgroundColor: '#f8fafc',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  inspectionTaskCheckbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#cbd5e1',
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  inspectionTaskCheckboxCompleted: {
-    backgroundColor: '#10b981',
-    borderColor: '#10b981',
-  },
-  inspectionTaskCheckmark: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  inspectionTaskText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#0f172a',
-    textAlign: 'right',
-    fontWeight: '600',
-  },
-  inspectionTaskTextCompleted: {
-    textDecorationLine: 'line-through',
-    color: '#64748b',
-  },
-  inspectionExpandButton: {
-    marginTop: 20,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
-    alignItems: 'center',
-  },
-  inspectionExpandButtonText: {
-    color: '#2563eb',
-    fontWeight: '700',
-    fontSize: 15,
-  },
-  // Reports Styles
-  reportsPageHeader: {
-    marginBottom: 8,
-  },
-  reportsPageTitle: {
-    fontSize: 32,
-    fontWeight: '800',
-    textAlign: 'right',
-    color: '#0f172a',
-    marginBottom: 6,
-  },
-  reportsPageSubtitle: {
-    fontSize: 16,
-    textAlign: 'right',
-    color: '#64748b',
-    marginBottom: 4,
-  },
-  reportsGrid: {
-    flexDirection: 'row-reverse',
-    flexWrap: 'wrap',
-    marginTop: 20,
-    justifyContent: 'space-between',
-  },
-  reportCard: {
-    width: '48%',
-    marginBottom: 16,
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 2,
-    borderColor: '#e2e8f0',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    alignItems: 'center',
-    minHeight: 180,
-  },
-  reportCardIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: '#3b82f6',
-  },
-  reportCardIconText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#3b82f6',
-  },
-  reportCardTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#0f172a',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  reportCardDescription: {
-    fontSize: 13,
-    color: '#64748b',
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  reportSummaryCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 20,
-    marginTop: 20,
-    borderWidth: 2,
-    borderColor: '#3b82f6',
-    shadowColor: '#3b82f6',
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    marginBottom: 16,
-  },
-  reportSummaryRow: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-  },
-  reportSummaryLabel: {
-    fontSize: 16,
-    color: '#64748b',
-    fontWeight: '600',
-  },
-  reportSummaryValue: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#0f172a',
-  },
-  reportSummaryValuePaid: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#10b981',
-  },
-  reportSummaryValuePending: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#f59e0b',
-  },
-  reportItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginBottom: 8,
-    backgroundColor: '#f8fafc',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  reportItemRow: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  reportItemLabel: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  reportItemValue: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#2563eb',
-  },
-  reportItemSubtext: {
-    fontSize: 12,
-    color: '#64748b',
-    textAlign: 'right',
-  },
-  // Warehouse Main Screen Styles
-  warehouseMainHeader: {
-    marginBottom: 8,
-  },
-  warehouseMainTitle: {
-    fontSize: 32,
-    fontWeight: '800',
-    textAlign: 'right',
-    color: '#0f172a',
-    marginBottom: 6,
-  },
-  warehouseMainSubtitle: {
-    fontSize: 16,
-    textAlign: 'right',
-    color: '#64748b',
-    marginBottom: 4,
-  },
-  warehouseMainOptions: {
-    flexDirection: 'row-reverse',
-    gap: 16,
-    marginTop: 20,
-    justifyContent: 'space-between',
-  },
-  warehouseMainOptionCard: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 2,
-    borderColor: '#e2e8f0',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    alignItems: 'center',
-    minHeight: 200,
-  },
-  warehouseMainOptionIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: '#3b82f6',
-  },
-  warehouseMainOptionIconText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#3b82f6',
-  },
-  warehouseMainOptionTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#0f172a',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  warehouseMainOptionDescription: {
-    fontSize: 13,
-    color: '#64748b',
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  // Warehouse Inventory Styles
-  categorySection: {
-    marginTop: 24,
-  },
-  categoryTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#0f172a',
-    textAlign: 'right',
-    marginBottom: 16,
-  },
-  inventoryCardBody: {
-    marginTop: 12,
-    gap: 8,
-  },
-  inventoryStockRow: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  inventoryStockLabel: {
-    fontSize: 13,
-    color: '#64748b',
-    fontWeight: '600',
-  },
-  inventoryStockValue: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#0f172a',
-  },
-  inventoryStockText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0f172a',
-    textAlign: 'right',
-  },
-  inventoryMinStockText: {
-    fontSize: 13,
-    color: '#64748b',
-    textAlign: 'right',
-  },
-  inventoryAlertBadge: {
-    backgroundColor: '#fee2e2',
-    borderRadius: 8,
-    padding: 6,
-    marginTop: 4,
-    borderWidth: 1,
-    borderColor: '#fecaca',
-  },
-  inventoryAlertText: {
-    fontSize: 12,
-    color: '#ef4444',
-    fontWeight: '700',
-    textAlign: 'right',
-  },
-  inventoryCardFooter: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
-    alignItems: 'center',
-  },
-  inventoryCardEditHint: {
-    fontSize: 13,
-    color: '#3b82f6',
-    fontWeight: '700',
-  },
-  // Warehouse Inventory List Styles
-  warehouseInventoryListHeader: {
-    marginBottom: 8,
-  },
-  warehouseInventoryListTitle: {
-    fontSize: 32,
-    fontWeight: '800',
-    textAlign: 'right',
-    color: '#0f172a',
-    marginBottom: 6,
-  },
-  warehouseInventoryListSubtitle: {
-    fontSize: 16,
-    textAlign: 'right',
-    color: '#64748b',
-    marginBottom: 4,
-  },
-  warehouseList: {
-    marginTop: 20,
-    gap: 12,
-  },
-  warehouseListItem: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 2,
-    borderColor: '#e2e8f0',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    gap: 12,
-  },
-  warehouseListItemIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#eff6ff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#3b82f6',
-  },
-  warehouseListItemIconText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#3b82f6',
-  },
-  warehouseListItemContent: {
-    flex: 1,
-  },
-  warehouseListItemTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#0f172a',
-    textAlign: 'right',
-    marginBottom: 4,
-  },
-  warehouseListItemSubtext: {
-    fontSize: 13,
-    color: '#64748b',
-    textAlign: 'right',
-  },
-  warehouseListItemArrow: {
-    fontSize: 24,
-    color: '#64748b',
-    fontWeight: '300',
-  },
-  // Inventory Edit Screen Styles
-  inventoryEditItemInfo: {
-    marginBottom: 24,
-    paddingBottom: 20,
-    borderBottomWidth: 2,
-    borderBottomColor: '#f1f5f9',
-  },
-  inventoryEditItemName: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#0f172a',
-    textAlign: 'right',
-    marginBottom: 6,
-  },
-  inventoryEditItemCategory: {
-    fontSize: 14,
-    color: '#64748b',
-    textAlign: 'right',
-    fontWeight: '600',
-  },
-  inventoryEditFields: {
-    gap: 20,
-    marginBottom: 24,
-  },
-  inventoryEditField: {
-    gap: 8,
-  },
-  inventoryEditFieldLabel: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0f172a',
-    textAlign: 'right',
-  },
-  inventoryEditFieldRow: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 12,
-    borderWidth: 2,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 4,
-    backgroundColor: '#fff',
-  },
-  inventoryEditInput: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0f172a',
-    textAlign: 'right',
-    paddingVertical: 12,
-  },
-  inventoryEditUnit: {
-    fontSize: 14,
-    color: '#64748b',
-    fontWeight: '600',
-    minWidth: 40,
-    textAlign: 'right',
-  },
-  inventoryEditWarning: {
-    backgroundColor: '#fef3c7',
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#fbbf24',
-    marginTop: 8,
-  },
-  inventoryEditWarningText: {
-    fontSize: 13,
-    color: '#92400e',
-    textAlign: 'right',
-    fontWeight: '700',
   },
 });
 
