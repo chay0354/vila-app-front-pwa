@@ -9,6 +9,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import {
   Alert,
   Modal,
+  Image,
   ImageBackground,
   Pressable,
   ScrollView,
@@ -17,6 +18,7 @@ import {
   Text,
   TextInput,
   View,
+  Platform,
 } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import {
@@ -24,9 +26,17 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
+// Safely import PushNotification - may be null if native module not linked
+let PushNotification: any = null;
+try {
+  PushNotification = require('react-native-push-notification').default || require('react-native-push-notification');
+} catch (e) {
+  console.warn('react-native-push-notification not available:', e);
+}
+
 import { API_BASE_URL } from './src/apiConfig';
 
-type Screen = 'home' | 'signin' | 'signup' | 'hub' | 'orders' | 'orderEdit' | 'exitInspections' | 'warehouse' | 'warehouseMenu' | 'warehouseOrders' | 'warehouseInventory' | 'warehouseInventoryDetail' | 'newWarehouse' | 'newWarehouseItem' | 'newWarehouseOrder' | 'maintenance' | 'maintenanceTasks' | 'maintenanceTaskDetail' | 'newMaintenanceTask' | 'reports' | 'chat' | 'attendance';
+type Screen = 'home' | 'signin' | 'signup' | 'hub' | 'orders' | 'orderEdit' | 'exitInspections' | 'warehouse' | 'warehouseMenu' | 'warehouseOrders' | 'warehouseInventory' | 'warehouseInventoryDetail' | 'newWarehouse' | 'newWarehouseItem' | 'newWarehouseOrder' | 'maintenance' | 'maintenanceTasks' | 'maintenanceTaskDetail' | 'newMaintenanceTask' | 'reports' | 'chat' | 'attendance' | 'invoices' | 'cleaningSchedule';
 type OrderStatus = 'חדש' | 'באישור' | 'שולם חלקית' | 'שולם' | 'בוטל';
 type InspectionStatus =
   | 'זמן הביקורות טרם הגיע'
@@ -297,8 +307,137 @@ function AppContent() {
   const [reportsSummary, setReportsSummary] = useState<{totalRevenue: number; totalPaid: number; totalExpenses: number} | null>(null);
   const [reportsSummaryError, setReportsSummaryError] = useState<string | null>(null);
   const [maintenanceTasksReport, setMaintenanceTasksReport] = useState<any[]>([]);
+  // Track previous state for notifications
+  const [previousMaintenanceTasks, setPreviousMaintenanceTasks] = useState<any[]>([]);
+  const [previousChatMessages, setPreviousChatMessages] = useState<Array<{id: number; sender: string; content: string; created_at: string}>>([]);
   const statusBarStyle = screen === 'home' ? 'light-content' : 'dark-content';
   const statusBar = <StatusBar barStyle={statusBarStyle} />;
+
+  // Initialize push notifications (local notifications only, no Firebase)
+  useEffect(() => {
+    // Check if PushNotification is available before attempting to use it
+    if (!PushNotification) {
+      console.warn('PushNotification module not available - notifications will use Alert fallback');
+      return;
+    }
+
+    try {
+      // Double-check that configure method exists and PushNotification is still valid
+      if (!PushNotification || typeof PushNotification.configure !== 'function') {
+        console.warn('PushNotification.configure is not a function');
+        return;
+      }
+
+      // Create a safe config object
+      const config: any = {
+        onRegister: function (token: any) {
+          console.log('Push notification token:', token);
+        },
+        onNotification: function (notification: any) {
+          console.log('Notification received:', notification);
+        },
+        onAction: function (notification: any) {
+          console.log('Notification action:', notification.action);
+        },
+        onRegistrationError: function (err: any) {
+          console.error('Notification registration error:', err);
+        },
+        permissions: {
+          alert: true,
+          badge: true,
+          sound: true,
+        },
+        popInitialNotification: false,
+      };
+
+      // Only add requestPermissions if PushNotification is still valid
+      if (PushNotification && Platform.OS === 'android') {
+        config.requestPermissions = true;
+      }
+
+      // Final check before calling configure
+      if (!PushNotification || typeof PushNotification.configure !== 'function') {
+        console.warn('PushNotification became unavailable before configure call');
+        return;
+      }
+
+      PushNotification.configure(config);
+
+      // Create notification channel for Android
+      if (Platform.OS === 'android' && PushNotification) {
+        try {
+          if (PushNotification.createChannel && typeof PushNotification.createChannel === 'function') {
+            PushNotification.createChannel(
+              {
+                channelId: 'default',
+                channelName: 'התראות מערכת',
+                channelDescription: 'התראות עבור משימות תחזוקה והודעות צ\'אט',
+                playSound: true,
+                soundName: 'default',
+                importance: 4, // IMPORTANCE_HIGH
+                vibrate: true,
+              },
+              (created: boolean) => console.log(`Notification channel ${created ? 'created' : 'already exists'}`)
+            );
+          }
+        } catch (channelError) {
+          console.warn('Error creating notification channel:', channelError);
+        }
+      }
+    } catch (error) {
+      console.error('Error initializing notifications:', error);
+      // Don't throw - just log and continue without notifications
+    }
+  }, []);
+
+  // Notification function using react-native-push-notification
+  const showNotification = (title: string, message: string) => {
+    // Always use Alert fallback - PushNotification module is not properly linked
+    // This prevents crashes and provides a working notification system
+    Alert.alert(title, message, [{ text: 'OK' }]);
+    return;
+
+    // Disabled code - uncomment if PushNotification is properly linked
+    /*
+    // Always check if PushNotification is available before using it
+    if (!PushNotification) {
+      Alert.alert(title, message, [{ text: 'OK' }]);
+      return;
+    }
+
+    try {
+      // Check if localNotification method exists
+      if (typeof PushNotification.localNotification !== 'function') {
+        console.warn('PushNotification.localNotification is not a function, using Alert fallback');
+        Alert.alert(title, message, [{ text: 'OK' }]);
+        return;
+      }
+
+      // Final check before calling
+      if (!PushNotification) {
+        Alert.alert(title, message, [{ text: 'OK' }]);
+        return;
+      }
+
+      PushNotification.localNotification({
+        channelId: 'default',
+        title,
+        message,
+        playSound: true,
+        soundName: 'default',
+        importance: 'high',
+        priority: 'high',
+        vibrate: true,
+        vibration: 300,
+        userInfo: { id: Date.now().toString() },
+      });
+    } catch (error) {
+      console.error('Error showing notification:', error);
+      // Fallback to alert if notification fails
+      Alert.alert(title, message, [{ text: 'OK' }]);
+    }
+    */
+  };
 
   const systemUserNameById = useMemo(() => {
     const m = new Map<string, string>();
@@ -317,7 +456,7 @@ function AppContent() {
   const loadSystemUsers = async (force = false) => {
     if (systemUsersLoaded && !force) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/users`);
+      const res = await fetch(`${API_BASE_URL}/api/users`);
       if (!res.ok) return;
       const data = await res.json();
       setSystemUsers(Array.isArray(data) ? data : []);
@@ -393,14 +532,35 @@ function AppContent() {
 
   const loadChatMessages = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/chat/messages`);
+      const res = await fetch(`${API_BASE_URL}/api/chat/messages`);
       if (!res.ok) {
         console.warn('Failed to load chat messages', res.status);
         return;
       }
       const data = await res.json();
       // Reverse to show oldest first (backend returns newest first)
-      setChatMessages((data ?? []).reverse());
+      const messages = (data ?? []).reverse();
+      
+      // Check for new messages (not from current user)
+      if (userName && previousChatMessages.length > 0 && messages.length > previousChatMessages.length) {
+        const previousMessageIds = new Set(previousChatMessages.map(m => m.id));
+        const newMessages = messages.filter(m => 
+          !previousMessageIds.has(m.id) && m.sender !== userName
+        );
+        
+        if (newMessages.length > 0) {
+          const latestMessage = newMessages[newMessages.length - 1];
+          showNotification(
+            `הודעה חדשה מ-${latestMessage.sender}`,
+            latestMessage.content.length > 50 
+              ? latestMessage.content.substring(0, 50) + '...' 
+              : latestMessage.content
+          );
+        }
+      }
+      
+      setPreviousChatMessages(messages);
+      setChatMessages(messages);
     } catch (err) {
       console.warn('Error loading chat messages', err);
     }
@@ -410,7 +570,7 @@ function AppContent() {
     if (!content.trim() || !userName) return;
     
     try {
-      const url = `${API_BASE_URL}/chat/messages`;
+      const url = `${API_BASE_URL}/api/chat/messages`;
       console.log('Sending chat message:', { url, sender: userName, content: content.trim() });
       
       const res = await fetch(url, {
@@ -458,6 +618,23 @@ function AppContent() {
       return () => clearInterval(interval);
     }
   }, [screen]);
+
+  // Poll for new messages and assignments when user is logged in (but not on chat screen - it has its own polling)
+  useEffect(() => {
+    if (!userName || screen === 'chat') return;
+    
+    // Load maintenance tasks and chat messages periodically
+    const pollInterval = setInterval(() => {
+      loadMaintenanceTasksReport();
+      loadChatMessages();
+    }, 10000); // Check every 10 seconds
+    
+    // Initial load
+    loadMaintenanceTasksReport();
+    loadChatMessages();
+    
+    return () => clearInterval(pollInterval);
+  }, [userName, screen]);
 
   const loadAttendanceStatus = async () => {
     if (!userName) return;
@@ -535,7 +712,7 @@ function AppContent() {
 
   const loadWarehouses = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/warehouses`);
+      const res = await fetch(`${API_BASE_URL}/api/warehouses`);
       if (res.ok) {
         const data = await res.json();
         setWarehouses(data || []);
@@ -547,7 +724,7 @@ function AppContent() {
 
   const loadWarehouseItems = async (warehouseId: string) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/warehouses/${warehouseId}/items`);
+      const res = await fetch(`${API_BASE_URL}/api/warehouses/${warehouseId}/items`);
       if (res.ok) {
         const data = await res.json();
         setWarehouseItems(data || []);
@@ -559,7 +736,7 @@ function AppContent() {
 
   const loadAllWarehouseItemsForReports = async () => {
     try {
-      const warehousesRes = await fetch(`${API_BASE_URL}/warehouses`);
+      const warehousesRes = await fetch(`${API_BASE_URL}/api/warehouses`);
       if (!warehousesRes.ok) return;
       const ws = (await warehousesRes.json()) || [];
       setWarehouses(ws);
@@ -567,7 +744,7 @@ function AppContent() {
       const lists = await Promise.all(
         (ws as Array<{ id: string }>).map(async w => {
           try {
-            const itemsRes = await fetch(`${API_BASE_URL}/warehouses/${w.id}/items`);
+            const itemsRes = await fetch(`${API_BASE_URL}/api/warehouses/${w.id}/items`);
             if (!itemsRes.ok) return [];
             return (await itemsRes.json()) || [];
           } catch {
@@ -584,7 +761,7 @@ function AppContent() {
   const loadReportsSummary = async () => {
     try {
       setReportsSummaryError(null);
-      const res = await fetch(`${API_BASE_URL}/reports/summary`);
+      const res = await fetch(`${API_BASE_URL}/api/reports/summary`);
       if (!res.ok) {
         const text = await res.text();
         setReportsSummary(null);
@@ -601,7 +778,7 @@ function AppContent() {
 
   const loadAttendanceLogsReport = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/attendance/logs`);
+      const res = await fetch(`${API_BASE_URL}/api/attendance/logs`);
       if (!res.ok) return;
       const data = await res.json();
       setAttendanceLogsReport(data || []);
@@ -612,10 +789,42 @@ function AppContent() {
 
   const loadMaintenanceTasksReport = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/maintenance/tasks`);
+      const res = await fetch(`${API_BASE_URL}/api/maintenance/tasks`);
       if (!res.ok) return;
       const data = await res.json();
-      setMaintenanceTasksReport(data || []);
+      const tasks = data || [];
+      
+      // Check for new assignments to current user
+      if (userName && previousMaintenanceTasks.length > 0) {
+        const previousTasksMap = new Map(previousMaintenanceTasks.map((t: any) => [t.id, t]));
+        const currentUser = systemUsers.find(u => u.username === userName);
+        const currentUserId = currentUser?.id?.toString();
+        
+        tasks.forEach((t: any) => {
+          const prevTask = previousTasksMap.get(t.id);
+          const currentAssignedTo = (t.assigned_to || t.assignedTo || '').toString().trim();
+          const prevAssignedTo = prevTask ? ((prevTask.assigned_to || prevTask.assignedTo || '').toString().trim()) : '';
+          
+          // Check if this task was just assigned to the current user
+          // Assignment happens when: wasn't assigned before OR was assigned to someone else, now assigned to me
+          if (currentAssignedTo && currentAssignedTo !== prevAssignedTo) {
+            // Check if assigned to current user (by username or user ID)
+            const isAssignedToMe = 
+              currentAssignedTo === userName || 
+              (currentUserId && currentAssignedTo === currentUserId);
+            
+            if (isAssignedToMe) {
+              showNotification(
+                'משימה חדשה הוקצתה לך',
+                `משימת תחזוקה חדשה: ${t.title || 'ללא כותרת'}`
+              );
+            }
+          }
+        });
+      }
+      
+      setPreviousMaintenanceTasks(tasks);
+      setMaintenanceTasksReport(tasks);
     } catch (err) {
       console.error('Error loading maintenance tasks for reports:', err);
     }
@@ -623,7 +832,7 @@ function AppContent() {
 
   const loadMaintenanceUnits = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/maintenance/tasks`);
+      const res = await fetch(`${API_BASE_URL}/api/maintenance/tasks`);
       if (!res.ok) return;
       const data = (await res.json()) || [];
 
@@ -672,7 +881,7 @@ function AppContent() {
 
   const loadOrders = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/orders`);
+      const res = await fetch(`${API_BASE_URL}/api/orders`);
       if (!res.ok) return;
       const data = await res.json();
       const list = (data || []).map((o: any): Order => ({
@@ -697,7 +906,7 @@ function AppContent() {
 
   const loadInventoryOrders = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/inventory/orders`);
+      const res = await fetch(`${API_BASE_URL}/api/inventory/orders`);
       if (!res.ok) return;
       const data = await res.json();
       const list = (data || []).map((o: any): InventoryOrder => {
@@ -720,6 +929,38 @@ function AppContent() {
       setInventoryOrders(list);
     } catch (err) {
       console.error('Error loading inventory orders:', err);
+    }
+  };
+
+  const createInventoryOrder = async (order: InventoryOrder) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/inventory/orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          // Don't send ID - let backend generate UUID to avoid conflicts
+          itemId: order.itemId,
+          itemName: order.itemName,
+          quantity: order.quantity,
+          unit: order.unit,
+          orderDate: order.orderDate,
+          deliveryDate: order.deliveryDate,
+          status: order.status,
+          orderType: order.orderType,
+          orderedBy: order.orderedBy,
+          unitNumber: order.unitNumber,
+        }),
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ detail: 'שגיאה לא ידועה' }));
+        throw new Error(errorData.detail || 'לא ניתן ליצור הזמנה');
+      }
+      const data = await res.json();
+      await loadInventoryOrders();
+      return data;
+    } catch (err: any) {
+      Alert.alert('שגיאה', err.message || 'אירעה שגיאה ביצירת ההזמנה');
+      throw err;
     }
   };
 
@@ -752,7 +993,7 @@ function AppContent() {
 
   const createWarehouse = async (name: string, location?: string) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/warehouses`, {
+      const res = await fetch(`${API_BASE_URL}/api/warehouses`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, location }),
@@ -784,7 +1025,7 @@ function AppContent() {
       }
       
       console.log('Creating warehouse item:', { warehouseId, payload });
-      const res = await fetch(`${API_BASE_URL}/warehouses/${warehouseId}/items`, {
+      const res = await fetch(`${API_BASE_URL}/api/warehouses/${warehouseId}/items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -819,7 +1060,7 @@ function AppContent() {
 
   const updateWarehouseItem = async (warehouseId: string, itemId: string, quantity: number) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/warehouses/${warehouseId}/items/${itemId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/warehouses/${warehouseId}/items/${itemId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ quantity }),
@@ -866,7 +1107,7 @@ function AppContent() {
     setError('');
     
     try {
-      const endpoint = mode === 'signup' ? '/auth/signup' : '/auth/signin';
+      const endpoint = mode === 'signup' ? '/api/auth/signup' : '/api/auth/login';
       const url = `${API_BASE_URL}${endpoint}`;
       console.log('Attempting auth:', { mode, url, username: name.trim() });
       
@@ -1048,6 +1289,12 @@ function AppContent() {
                   style={styles.ctaOutline}
                 />
               </View>
+              <Pressable
+                onPress={() => showNotification('בדיקת התראות', 'זוהי הודעת בדיקה. התראות פועלות כהלכה!')}
+                style={styles.testNotificationButton}
+              >
+                <Text style={styles.testNotificationButtonText}>🔔 בדיקת התראות</Text>
+              </Pressable>
             </View>
 
             <View style={styles.tagRow}>
@@ -1289,6 +1536,8 @@ function AppContent() {
               icon="🧾"
               accent="#0ea5e9"
               details={['העלאת PDF/תמונה', 'OCR לזיהוי ספק, תאריך וסכום']}
+              cta="פתח חשבוניות"
+              onPress={() => setScreen('invoices')}
             />
             <OptionCard
               title="צ׳אט פנימי"
@@ -1305,6 +1554,14 @@ function AppContent() {
               details={['התחלה וסיום עבודה', 'מעקב שעות עבודה']}
               cta="פתח שעון נוכחות"
               onPress={() => setScreen('attendance')}
+            />
+            <OptionCard
+              title="סידורי ניקיון"
+              icon="🧹"
+              accent="#10b981"
+              details={['לוח זמנים לניקיון', 'הוספת מנקים ושעות עבודה']}
+              cta="פתח סידורי ניקיון"
+              onPress={() => setScreen('cleaningSchedule')}
             />
           </View>
         </ScrollView>
@@ -1341,7 +1598,7 @@ function AppContent() {
               internal_notes: changes.internalNotes,
             };
 
-            const res = await fetch(`${API_BASE_URL}/orders/${id}`, {
+            const res = await fetch(`${API_BASE_URL}/api/orders/${id}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(backendChanges),
@@ -1504,9 +1761,9 @@ function AppContent() {
     return (
       <NewWarehouseOrderScreen
         items={inventoryItems}
-        onSave={(order) => {
-          setInventoryOrders(prev => [...prev, order]);
-          setScreen('warehouseOrders');
+        onSave={async (order) => {
+          // Just save the order, don't navigate here
+          await createInventoryOrder(order);
         }}
         onCancel={() => setScreen('warehouseOrders')}
         safeAreaInsets={safeAreaInsets}
@@ -1638,7 +1895,7 @@ function AppContent() {
             if (updates.title) payload.title = updates.title;
             if (updates.description) payload.description = updates.description;
 
-            const res = await fetch(`${API_BASE_URL}/maintenance/tasks/${encodeURIComponent(taskId)}`, {
+            const res = await fetch(`${API_BASE_URL}/api/maintenance/tasks/${encodeURIComponent(taskId)}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payload),
@@ -1672,27 +1929,55 @@ function AppContent() {
         onRefreshUsers={() => loadSystemUsers(true)}
         onSave={async (task) => {
           try {
+            // If it's a data URI (base64), send it as JSON field instead
+            if (task.media?.uri && task.media.uri.startsWith('data:')) {
+              // Send as JSON in the request body
+              const jsonPayload: any = {
+                id: task.id,
+                unit_id: unit.id,
+                title: task.title,
+                description: task.description,
+                status: task.status,
+                created_date: task.createdDate,
+                imageUri: task.media.uri,
+              };
+              if (task.assignedTo) jsonPayload.assigned_to = task.assignedTo;
+              
+              const jsonRes = await fetch(`${API_BASE_URL}/api/maintenance/tasks`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(jsonPayload),
+              });
+              if (!jsonRes.ok) {
+                const errText = await jsonRes.text().catch(() => '');
+                throw new Error(errText || `HTTP ${jsonRes.status}`);
+              }
+              await loadMaintenanceUnits();
+              setScreen('maintenanceTasks');
+              return;
+            }
+
+            // Regular FormData upload
+            const form = new FormData();
+            form.append('id', task.id);
+            form.append('unit_id', unit.id);
+            form.append('title', task.title);
+            form.append('description', task.description);
+            form.append('status', task.status);
+            form.append('created_date', task.createdDate);
+            if (task.assignedTo) form.append('assigned_to', task.assignedTo);
+            if (task.media?.uri) {
+              form.append('media', {
+                // @ts-expect-error React Native FormData file
+                uri: task.media.uri,
+                type: task.media.type,
+                name: task.media.name,
+              });
+            }
+
             const res = await fetch(`${API_BASE_URL}/maintenance/tasks`, {
               method: 'POST',
-              body: (() => {
-                const form = new FormData();
-                form.append('id', task.id);
-                form.append('unit_id', unit.id);
-                form.append('title', task.title);
-                form.append('description', task.description);
-                form.append('status', task.status);
-                form.append('created_date', task.createdDate);
-                if (task.assignedTo) form.append('assigned_to', task.assignedTo);
-                if (task.media?.uri) {
-                  form.append('media', {
-                    // @ts-expect-error React Native FormData file
-                    uri: task.media.uri,
-                    type: task.media.type,
-                    name: task.media.name,
-                  });
-                }
-                return form;
-              })(),
+              body: form,
             });
             if (!res.ok) {
               const errText = await res.text().catch(() => '');
@@ -1708,6 +1993,26 @@ function AppContent() {
         safeAreaInsets={safeAreaInsets}
         statusBar={statusBar}
         userName={userName || ''}
+      />
+    );
+  }
+
+  if (screen === 'invoices') {
+    return (
+      <InvoicesScreen
+        onBack={() => setScreen('hub')}
+        safeAreaInsets={safeAreaInsets}
+        statusBar={statusBar}
+      />
+    );
+  }
+
+  if (screen === 'cleaningSchedule') {
+    return (
+      <CleaningScheduleScreen
+        onBack={() => setScreen('hub')}
+        safeAreaInsets={safeAreaInsets}
+        statusBar={statusBar}
       />
     );
   }
@@ -3450,51 +3755,67 @@ function NewWarehouseOrderScreen({
   statusBar,
   userName,
 }: NewWarehouseOrderScreenProps) {
-  const [selectedItems, setSelectedItems] = useState<{ itemId: string; quantity: number }[]>([]);
-  const [orderType, setOrderType] = useState<'הזמנת עובד' | 'הזמנה כללית'>('הזמנה כללית');
-  const [deliveryDate, setDeliveryDate] = useState('');
+  const [itemQuantities, setItemQuantities] = useState<Record<string, number>>({});
+  const [saving, setSaving] = useState(false);
 
-  const handleAddItem = (itemId: string, quantity: number) => {
-    const existingIndex = selectedItems.findIndex(i => i.itemId === itemId);
-    if (existingIndex >= 0) {
-      const updated = [...selectedItems];
-      updated[existingIndex].quantity += quantity;
-      setSelectedItems(updated);
+  const handleQuantityChange = (itemId: string, quantity: number) => {
+    if (quantity <= 0) {
+      const updated = { ...itemQuantities };
+      delete updated[itemId];
+      setItemQuantities(updated);
     } else {
-      setSelectedItems([...selectedItems, { itemId, quantity }]);
+      setItemQuantities({ ...itemQuantities, [itemId]: quantity });
     }
   };
 
-  const handleRemoveItem = (itemId: string) => {
-    setSelectedItems(selectedItems.filter(i => i.itemId !== itemId));
-  };
+  const handleSave = async () => {
+    const selectedItems = Object.entries(itemQuantities)
+      .filter(([_, qty]) => qty > 0)
+      .map(([itemId, quantity]) => {
+        const item = items.find(i => i.id === itemId);
+        return item ? { item, quantity } : null;
+      })
+      .filter((x): x is { item: InventoryItem; quantity: number } => x !== null);
 
-  const handleSave = () => {
     if (selectedItems.length === 0) {
-      Alert.alert('שגיאה', 'יש להוסיף לפחות פריט אחד להזמנה');
+      Alert.alert('שגיאה', 'יש לבחור לפחות פריט אחד');
       return;
     }
 
-    // Create order with first item (simplified - in real app would handle multiple items)
-    const firstItem = selectedItems[0];
-    const item = items.find(i => i.id === firstItem.itemId);
-    if (!item) return;
+    setSaving(true);
+    try {
+      // Create orders sequentially with small delays to avoid race conditions
+      // This prevents potential UUID collisions when creating multiple orders
+      for (let i = 0; i < selectedItems.length; i++) {
+        const { item, quantity } = selectedItems[i];
+        const newOrder: InventoryOrder = {
+          id: '', // Let backend generate UUID
+          itemId: item.id,
+          itemName: item.name,
+          quantity: quantity,
+          unit: item.unit,
+          orderDate: new Date().toISOString().split('T')[0],
+          status: 'ממתין לאישור',
+          orderType: 'הזמנה כללית',
+        };
+        await onSave(newOrder);
+        // Small delay between orders to ensure unique UUIDs
+        if (i < selectedItems.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+      }
 
-    const newOrder: InventoryOrder = {
-      id: `ORD-INV-${Date.now()}`,
-      itemId: item.id,
-      itemName: item.name,
-      quantity: firstItem.quantity,
-      unit: item.unit,
-      orderDate: new Date().toISOString().split('T')[0],
-      deliveryDate: deliveryDate || undefined,
-      status: 'ממתין לאישור',
-      orderType: orderType,
-      orderedBy: orderType === 'הזמנת עובד' ? userName : undefined,
-    };
-
-    onSave(newOrder);
+      setSaving(false);
+      Alert.alert('הצלחה', `נוצרו ${selectedItems.length} הזמנות בהצלחה`, [
+        { text: 'אישור', onPress: () => onCancel() }
+      ]);
+    } catch (err: any) {
+      setSaving(false);
+      Alert.alert('שגיאה', err.message || 'אירעה שגיאה ביצירת ההזמנות');
+    }
   };
+
+  const selectedCount = Object.values(itemQuantities).filter(qty => qty > 0).length;
 
   return (
     <SafeAreaView
@@ -3505,102 +3826,57 @@ function NewWarehouseOrderScreen({
         <Pressable onPress={onCancel} style={styles.backButton}>
           <Text style={styles.backButtonText}>← חזרה</Text>
         </Pressable>
+        <Text style={styles.ordersPageTitle}>הזמנה חדשה</Text>
       </View>
+
       <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.warehouseHeader}>
-          <View>
-            <Text style={styles.title}>הזמנה חדשה</Text>
-            <Text style={styles.subtitle}>
-              בחרו פריטים מהמלאי והוסיפו להזמנה
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.itemsTableSection}>
-          <Text style={styles.sectionTitle}>רשימת פריטי מלאי</Text>
-          <View style={styles.itemsTable}>
-            <View style={styles.tableHeader}>
-              <Text style={[styles.tableHeaderText, { flex: 2 }]}>מוצר</Text>
-              <Text style={[styles.tableHeaderText, { flex: 1 }]}>כמות</Text>
-              <Text style={[styles.tableHeaderText, { flex: 1 }]}>פעולה</Text>
-            </View>
-            {items.map(item => {
-              const selectedItem = selectedItems.find(si => si.itemId === item.id);
-              const currentQuantity = selectedItem ? selectedItem.quantity : 0;
-              return (
-                <ItemTableRow
-                  key={item.id}
-                  item={item}
-                  currentQuantity={currentQuantity}
-                  onAdd={handleAddItem}
-                />
-              );
-            })}
-          </View>
-        </View>
-
-        {selectedItems.length > 0 && (
-          <View style={styles.selectedItemsSummary}>
-            <Text style={styles.selectedItemsTitle}>פריטים נבחרים:</Text>
-            {selectedItems.map((si, idx) => {
-              const item = items.find(i => i.id === si.itemId);
-              return item ? (
-                <View key={idx} style={styles.selectedItemRow}>
-                  <Text style={styles.selectedItemText}>
-                    {item.name}: {si.quantity} {item.unit}
+        <View style={styles.simpleOrderList}>
+          {items.map(item => {
+            const quantity = itemQuantities[item.id] || 0;
+            return (
+              <View key={item.id} style={styles.simpleOrderItem}>
+                <View style={styles.simpleOrderItemInfo}>
+                  <Text style={styles.simpleOrderItemName}>{item.name}</Text>
+                  <Text style={styles.simpleOrderItemDetails}>
+                    {item.category} • מלאי: {item.currentStock} {item.unit}
                   </Text>
-                  <Pressable
-                    onPress={() => handleRemoveItem(si.itemId)}
-                    style={styles.removeItemButton}
-                  >
-                    <Text style={styles.removeItemButtonText}>×</Text>
-                  </Pressable>
                 </View>
-              ) : null;
-            })}
-          </View>
-        )}
-
-        <View style={styles.orderDetailsSection}>
-          <Text style={styles.sectionTitle}>פרטי הזמנה</Text>
-          
-          <View style={styles.field}>
-            <Text style={styles.label}>סוג הזמנה</Text>
-            <Pressable
-              onPress={() => {
-                setOrderType(
-                  orderType === 'הזמנה כללית' ? 'הזמנת עובד' : 'הזמנה כללית',
-                );
-              }}
-              style={styles.select}
-            >
-              <Text style={styles.selectValue}>{orderType}</Text>
-              <Text style={styles.selectCaret}>▾</Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>תאריך אספקה (אופציונלי)</Text>
-            <TextInput
-              style={styles.input}
-              value={deliveryDate}
-              onChangeText={setDeliveryDate}
-              placeholder="YYYY-MM-DD"
-              textAlign="right"
-            />
-          </View>
+                <View style={styles.simpleOrderItemControls}>
+                  <TextInput
+                    style={styles.simpleQuantityInput}
+                    value={quantity > 0 ? quantity.toString() : ''}
+                    onChangeText={(text) => {
+                      const num = parseInt(text) || 0;
+                      handleQuantityChange(item.id, num);
+                    }}
+                    placeholder="0"
+                    keyboardType="numeric"
+                    textAlign="center"
+                  />
+                  <Text style={styles.simpleOrderUnit}>{item.unit}</Text>
+                </View>
+              </View>
+            );
+          })}
         </View>
 
         <View style={styles.orderActions}>
           <Pressable
             onPress={handleSave}
-            style={styles.saveOrderButton}
+            disabled={selectedCount === 0 || saving}
+            style={[
+              styles.saveOrderButton,
+              (selectedCount === 0 || saving) && styles.saveOrderButtonDisabled,
+            ]}
           >
-            <Text style={styles.saveOrderButtonText}>צור הזמנה</Text>
+            <Text style={styles.saveOrderButtonText}>
+              {saving ? 'שומר...' : `צור הזמנה${selectedCount > 0 ? ` (${selectedCount} פריטים)` : ''}`}
+            </Text>
           </Pressable>
           <Pressable
             onPress={onCancel}
             style={styles.cancelOrderButton}
+            disabled={saving}
           >
             <Text style={styles.cancelOrderButtonText}>ביטול</Text>
           </Pressable>
@@ -3610,46 +3886,6 @@ function NewWarehouseOrderScreen({
   );
 }
 
-function ItemTableRow({ item, currentQuantity = 0, onAdd }: ItemTableRowProps) {
-  const [quantity, setQuantity] = useState('1');
-
-  const handleAdd = () => {
-    const qty = Number(quantity);
-    if (qty > 0) {
-      onAdd(item.id, qty);
-      setQuantity('1');
-    }
-  };
-
-  return (
-    <View style={styles.tableRow}>
-      <View style={[styles.tableCell, { flex: 2 }]}>
-        <Text style={styles.tableCellText}>{item.name}</Text>
-        <Text style={styles.tableCellSubtext}>{item.category} • {item.unit}</Text>
-        {currentQuantity > 0 && (
-          <Text style={styles.currentQuantityText}>
-            נבחר: {currentQuantity} {item.unit}
-          </Text>
-        )}
-      </View>
-      <View style={[styles.tableCell, { flex: 1 }]}>
-        <TextInput
-          style={styles.quantityInput}
-          value={quantity}
-          onChangeText={setQuantity}
-          keyboardType="numeric"
-          placeholder="1"
-          textAlign="center"
-        />
-      </View>
-      <View style={[styles.tableCell, { flex: 1 }]}>
-        <Pressable onPress={handleAdd} style={styles.tableOrderButton}>
-          <Text style={styles.tableOrderButtonText}>הוסף</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
 
 type MaintenanceScreenProps = {
   units: MaintenanceUnit[];
@@ -5716,11 +5952,38 @@ function MaintenanceTaskDetailScreen({
             <Text style={styles.taskDetailDescription}>{task.description}</Text>
           </View>
 
+          {/* Display image if exists (for both open and closed tasks) */}
+          {task.imageUri && (
+            <View style={styles.taskDetailSection}>
+              <Text style={styles.taskDetailLabel}>תמונה:</Text>
+              <View style={styles.taskImageContainer}>
+                <Image
+                  source={{ uri: task.imageUri }}
+                  style={styles.taskDetailImage}
+                  resizeMode="contain"
+                />
+              </View>
+              {task.status === 'סגור' && (
+                <View style={styles.taskClosedIndicator}>
+                  <Text style={styles.taskClosedIndicatorText}>✓ משימה סגורה</Text>
+                </View>
+              )}
+            </View>
+          )}
+
           {task.status !== 'סגור' && (
             <View style={styles.taskActions}>
               <Pressable onPress={handleOpenCloseModal} style={styles.closeTaskButton}>
                 <Text style={styles.closeTaskButtonText}>סגור משימה</Text>
               </Pressable>
+            </View>
+          )}
+
+          {task.status === 'סגור' && !task.imageUri && (
+            <View style={styles.taskActions}>
+              <View style={styles.taskClosedButton}>
+                <Text style={styles.taskClosedButtonText}>✓ משימה סגורה</Text>
+              </View>
             </View>
           )}
         </View>
@@ -5743,8 +6006,12 @@ function MaintenanceTaskDetailScreen({
               <Text style={styles.label}>תמונה *</Text>
               {closeModalImageUri ? (
                 <View style={styles.closeModalImageContainer}>
-                  <View style={styles.taskImagePlaceholder}>
-                    <Text style={styles.taskImagePlaceholderText}>📷 תמונה נבחרה</Text>
+                  <View style={styles.taskImagePreviewContainer}>
+                    <Image
+                      source={{ uri: closeModalImageUri }}
+                      style={styles.taskImagePreview}
+                      resizeMode="contain"
+                    />
                   </View>
                   <Pressable
                     onPress={handleCloseModalImageSelect}
@@ -5811,8 +6078,9 @@ function NewMaintenanceTaskScreen({
   const handlePickMedia = async () => {
     try {
       const result = await launchImageLibrary({
-        mediaType: 'mixed',
+        mediaType: 'photo',
         selectionLimit: 1,
+        includeBase64: true,
       });
       if (result.didCancel) return;
       const asset = result.assets?.[0];
@@ -5820,9 +6088,11 @@ function NewMaintenanceTaskScreen({
         Alert.alert('שגיאה', 'לא נבחר קובץ');
         return;
       }
-      const mime = asset.type || 'application/octet-stream';
+      const mime = asset.type || 'image/jpeg';
       const name = asset.fileName || `media-${Date.now()}`;
-      setMedia({ uri: asset.uri, type: mime, name });
+      // Use base64 data URI if available, otherwise use file URI
+      const uri = asset.base64 ? `data:${mime};base64,${asset.base64}` : asset.uri;
+      setMedia({ uri, type: mime, name });
     } catch (err: any) {
       Alert.alert('שגיאה', err?.message || 'לא ניתן לבחור מדיה');
     }
@@ -5916,13 +6186,17 @@ function NewMaintenanceTaskScreen({
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>מדיה (תמונה/וידאו)</Text>
+            <Text style={styles.label}>תמונה</Text>
             {media ? (
               <View style={styles.closeModalImageContainer}>
-                <View style={styles.taskImagePlaceholder}>
-                  <Text style={styles.taskImagePlaceholderText}>📎 {media.name}</Text>
+                <View style={styles.taskImagePreviewContainer}>
+                  <Image
+                    source={{ uri: media.uri }}
+                    style={styles.taskImagePreview}
+                    resizeMode="contain"
+                  />
                 </View>
-                <View style={{ flexDirection: 'row', gap: 10 }}>
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
                   <Pressable onPress={handlePickMedia} style={styles.changeImageButton}>
                     <Text style={styles.changeImageButtonText}>החלף</Text>
                   </Pressable>
@@ -5933,7 +6207,7 @@ function NewMaintenanceTaskScreen({
               </View>
             ) : (
               <Pressable onPress={handlePickMedia} style={styles.uploadImageButton}>
-                <Text style={styles.uploadImageButtonText}>+ העלה תמונה/וידאו</Text>
+                <Text style={styles.uploadImageButtonText}>+ העלה תמונה</Text>
               </Pressable>
             )}
           </View>
@@ -5998,6 +6272,577 @@ function NewMaintenanceTaskScreen({
           </View>
         </View>
       </Modal>
+    </SafeAreaView>
+  );
+}
+
+type CleaningScheduleEntry = {
+  id: string;
+  date: string; // YYYY-MM-DD
+  start_time: string; // HH:MM
+  end_time: string; // HH:MM
+  cleaner_name: string;
+  created_at?: string;
+};
+
+type CleaningScheduleScreenProps = {
+  onBack: () => void;
+  safeAreaInsets: { top: number };
+  statusBar: React.ReactElement;
+};
+
+function CleaningScheduleScreen({
+  onBack,
+  safeAreaInsets,
+  statusBar,
+}: CleaningScheduleScreenProps) {
+  const [entries, setEntries] = useState<CleaningScheduleEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [startTime, setStartTime] = useState<string>('');
+  const [endTime, setEndTime] = useState<string>('');
+  const [cleanerName, setCleanerName] = useState<string>('');
+  const [editingEntry, setEditingEntry] = useState<CleaningScheduleEntry | null>(null);
+  const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => {
+    const today = new Date();
+    const day = today.getDay();
+    const diff = today.getDate() - day + (day === 0 ? -6 : 1); // Monday as first day
+    const monday = new Date(today.setDate(diff));
+    monday.setHours(0, 0, 0, 0);
+    return monday;
+  });
+
+  useEffect(() => {
+    loadScheduleEntries();
+  }, []);
+
+  const loadScheduleEntries = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE_URL}/api/cleaning-schedule`);
+      if (!response.ok) {
+        throw new Error('Failed to load schedule');
+      }
+      const data = await response.json();
+      setEntries(data || []);
+    } catch (err: any) {
+      console.error('Error loading schedule:', err);
+      Alert.alert('שגיאה', 'לא ניתן לטעון את לוח הזמנים');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveEntry = async () => {
+    if (!selectedDate || !startTime || !endTime || !cleanerName.trim()) {
+      Alert.alert('שגיאה', 'יש למלא את כל השדות');
+      return;
+    }
+
+    try {
+      const entryData = {
+        date: selectedDate,
+        start_time: startTime,
+        end_time: endTime,
+        cleaner_name: cleanerName.trim(),
+      };
+
+      let response;
+      if (editingEntry) {
+        // Update existing entry
+        response = await fetch(`${API_BASE_URL}/api/cleaning-schedule/${editingEntry.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(entryData),
+        });
+      } else {
+        // Create new entry
+        response = await fetch(`${API_BASE_URL}/api/cleaning-schedule`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(entryData),
+        });
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(errorText || 'Failed to save entry');
+      }
+
+      await loadScheduleEntries();
+      setShowAddModal(false);
+      setSelectedDate('');
+      setStartTime('');
+      setEndTime('');
+      setCleanerName('');
+      setEditingEntry(null);
+    } catch (err: any) {
+      Alert.alert('שגיאה', err.message || 'לא ניתן לשמור את הרשומה');
+    }
+  };
+
+  const handleDeleteEntry = async (id: string) => {
+    Alert.alert(
+      'מחיקת רשומה',
+      'האם אתה בטוח שברצונך למחוק את הרשומה?',
+      [
+        { text: 'ביטול', style: 'cancel' },
+        {
+          text: 'מחק',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const response = await fetch(`${API_BASE_URL}/api/cleaning-schedule/${id}`, {
+                method: 'DELETE',
+              });
+              if (!response.ok) throw new Error('Failed to delete');
+              await loadScheduleEntries();
+            } catch (err: any) {
+              Alert.alert('שגיאה', 'לא ניתן למחוק את הרשומה');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleEditEntry = (entry: CleaningScheduleEntry) => {
+    setEditingEntry(entry);
+    setSelectedDate(entry.date);
+    setStartTime(entry.start_time);
+    setEndTime(entry.end_time);
+    setCleanerName(entry.cleaner_name);
+    setShowAddModal(true);
+  };
+
+  const getWeekDays = () => {
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(currentWeekStart);
+      date.setDate(currentWeekStart.getDate() + i);
+      days.push(date);
+    }
+    return days;
+  };
+
+  const getEntriesForDate = (date: Date) => {
+    const dateStr = date.toISOString().split('T')[0];
+    return entries.filter(e => e.date === dateStr).sort((a, b) => 
+      a.start_time.localeCompare(b.start_time)
+    );
+  };
+
+  const formatDate = (date: Date) => {
+    const dayNames = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+    return dayNames[date.getDay()];
+  };
+
+  const formatDateShort = (date: Date) => {
+    return `${date.getDate()}/${date.getMonth() + 1}`;
+  };
+
+  const navigateWeek = (direction: 'prev' | 'next') => {
+    const newDate = new Date(currentWeekStart);
+    newDate.setDate(currentWeekStart.getDate() + (direction === 'next' ? 7 : -7));
+    setCurrentWeekStart(newDate);
+  };
+
+  const weekDays = getWeekDays();
+
+  return (
+    <SafeAreaView style={[styles.container, { paddingTop: safeAreaInsets.top }]}>
+      {statusBar}
+      <View style={styles.ordersHeader}>
+        <Pressable onPress={onBack} style={styles.backButton}>
+          <Text style={styles.backButtonText}>← חזרה</Text>
+        </Pressable>
+        <Text style={styles.ordersPageTitle}>סידורי ניקיון</Text>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <View style={styles.scheduleContainer}>
+          {/* Week Navigation */}
+          <View style={styles.weekNavigation}>
+            <Pressable onPress={() => navigateWeek('prev')} style={styles.weekNavButton}>
+              <Text style={styles.weekNavButtonText}>← שבוע קודם</Text>
+            </Pressable>
+            <Text style={styles.weekTitle}>
+              {formatDateShort(weekDays[0])} - {formatDateShort(weekDays[6])}
+            </Text>
+            <Pressable onPress={() => navigateWeek('next')} style={styles.weekNavButton}>
+              <Text style={styles.weekNavButtonText}>שבוע הבא →</Text>
+            </Pressable>
+          </View>
+
+          {/* Schedule Grid */}
+          <View style={styles.scheduleGrid}>
+            {weekDays.map((day, index) => {
+              const dayEntries = getEntriesForDate(day);
+              const isToday = day.toDateString() === new Date().toDateString();
+              
+              return (
+                <View key={index} style={styles.scheduleDay}>
+                  <View style={[styles.scheduleDayHeader, isToday && styles.scheduleDayHeaderToday]}>
+                    <Text style={[styles.scheduleDayName, isToday && styles.scheduleDayNameToday]}>
+                      {formatDate(day)}
+                    </Text>
+                    <Text style={[styles.scheduleDayDate, isToday && styles.scheduleDayDateToday]}>
+                      {formatDateShort(day)}
+                    </Text>
+                  </View>
+                  <ScrollView style={styles.scheduleDayContent}>
+                    {dayEntries.length === 0 ? (
+                      <Text style={styles.scheduleEmptyText}>אין תורים</Text>
+                    ) : (
+                      dayEntries.map((entry) => (
+                        <Pressable
+                          key={entry.id}
+                          style={styles.scheduleEntry}
+                          onPress={() => handleEditEntry(entry)}
+                          onLongPress={() => handleDeleteEntry(entry.id)}
+                        >
+                          <Text style={styles.scheduleEntryTime}>
+                            {entry.start_time} - {entry.end_time}
+                          </Text>
+                          <Text style={styles.scheduleEntryCleaner}>{entry.cleaner_name}</Text>
+                        </Pressable>
+                      ))
+                    )}
+                  </ScrollView>
+                  <Pressable
+                    style={styles.addEntryButton}
+                    onPress={() => {
+                      setSelectedDate(day.toISOString().split('T')[0]);
+                      setEditingEntry(null);
+                      setStartTime('');
+                      setEndTime('');
+                      setCleanerName('');
+                      setShowAddModal(true);
+                    }}
+                  >
+                    <Text style={styles.addEntryButtonText}>+ הוסף</Text>
+                  </Pressable>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      </ScrollView>
+
+      {/* Add/Edit Modal */}
+      <Modal
+        visible={showAddModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => {
+          setShowAddModal(false);
+          setEditingEntry(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              {editingEntry ? 'ערוך רשומה' : 'הוסף רשומה חדשה'}
+            </Text>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>תאריך *</Text>
+              <TextInput
+                style={styles.input}
+                value={selectedDate}
+                onChangeText={setSelectedDate}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor="#94a3b8"
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>שעת התחלה *</Text>
+              <TextInput
+                style={styles.input}
+                value={startTime}
+                onChangeText={setStartTime}
+                placeholder="HH:MM (לדוגמה: 09:00)"
+                placeholderTextColor="#94a3b8"
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>שעת סיום *</Text>
+              <TextInput
+                style={styles.input}
+                value={endTime}
+                onChangeText={setEndTime}
+                placeholder="HH:MM (לדוגמה: 12:00)"
+                placeholderTextColor="#94a3b8"
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>שם מנקה *</Text>
+              <TextInput
+                style={styles.input}
+                value={cleanerName}
+                onChangeText={setCleanerName}
+                placeholder="הזן שם מנקה"
+                placeholderTextColor="#94a3b8"
+              />
+            </View>
+
+            <View style={styles.modalButtons}>
+              <Pressable
+                onPress={handleSaveEntry}
+                style={[styles.modalButton, styles.formButtonPrimary]}
+              >
+                <Text style={styles.formButtonPrimaryText}>שמור</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setShowAddModal(false);
+                  setEditingEntry(null);
+                  setSelectedDate('');
+                  setStartTime('');
+                  setEndTime('');
+                  setCleanerName('');
+                }}
+                style={[styles.modalButton, styles.formButtonSecondary]}
+              >
+                <Text style={styles.formButtonSecondaryText}>ביטול</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+type InvoicesScreenProps = {
+  onBack: () => void;
+  safeAreaInsets: { top: number };
+  statusBar: React.ReactElement;
+};
+
+type InvoiceItem = {
+  name: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+};
+
+type ExtractedInvoiceData = {
+  total_price: number;
+  currency: string;
+  items: InvoiceItem[];
+  vendor?: string;
+  date?: string;
+  invoice_number?: string;
+};
+
+function InvoicesScreen({
+  onBack,
+  safeAreaInsets,
+  statusBar,
+}: InvoicesScreenProps) {
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [processing, setProcessing] = useState(false);
+  const [extractedData, setExtractedData] = useState<ExtractedInvoiceData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handlePickImage = async () => {
+    try {
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        selectionLimit: 1,
+        includeBase64: true,
+      });
+      if (result.didCancel) return;
+      const asset = result.assets?.[0];
+      const base64 = asset?.base64;
+      const mime = asset?.type || 'image/jpeg';
+      if (!base64) {
+        Alert.alert('שגיאה', 'לא ניתן לקרוא את התמונה שנבחרה');
+        return;
+      }
+      const dataUri = `data:${mime};base64,${base64}`;
+      setSelectedImage(dataUri);
+      setExtractedData(null);
+      setError(null);
+    } catch (err: any) {
+      Alert.alert('שגיאה', err?.message || 'לא ניתן לבחור תמונה');
+    }
+  };
+
+  const handleProcessInvoice = async () => {
+    if (!selectedImage) {
+      Alert.alert('שגיאה', 'יש לבחור תמונה תחילה');
+      return;
+    }
+
+    setProcessing(true);
+    setError(null);
+    setExtractedData(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/invoices/process`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          image: selectedImage,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(errorText || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      setExtractedData(data);
+    } catch (err: any) {
+      const errorMessage = err.message || 'שגיאה בעיבוד החשבונית';
+      setError(errorMessage);
+      Alert.alert('שגיאה', errorMessage);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const formatMoney = (amount: number, currency: string = 'ILS') => {
+    const symbol = currency === 'ILS' ? '₪' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency;
+    return `${symbol}${amount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  return (
+    <SafeAreaView style={[styles.container, { paddingTop: safeAreaInsets.top }]}>
+      {statusBar}
+      <View style={styles.ordersHeader}>
+        <Pressable onPress={onBack} style={styles.backButton}>
+          <Text style={styles.backButtonText}>← חזרה</Text>
+        </Pressable>
+        <Text style={styles.ordersPageTitle}>חשבוניות</Text>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <View style={styles.invoiceContainer}>
+          <Text style={styles.invoiceTitle}>עיבוד חשבונית</Text>
+          <Text style={styles.invoiceSubtitle}>
+            העלו תמונה של חשבונית והמערכת תזהה את הסכום הכולל ומחירי הפריטים
+          </Text>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>תמונת חשבונית</Text>
+            {selectedImage ? (
+              <View style={styles.imagePreviewContainer}>
+                <ImageBackground
+                  source={{ uri: selectedImage }}
+                  style={styles.imagePreview}
+                  resizeMode="contain"
+                >
+                  <View style={styles.imagePreviewOverlay}>
+                    <Pressable
+                      onPress={handlePickImage}
+                      style={styles.changeImageButton}
+                    >
+                      <Text style={styles.changeImageButtonText}>החלף תמונה</Text>
+                    </Pressable>
+                  </View>
+                </ImageBackground>
+              </View>
+            ) : (
+              <Pressable
+                onPress={handlePickImage}
+                style={styles.uploadImageButton}
+              >
+                <Text style={styles.uploadImageButtonText}>+ העלה תמונה</Text>
+              </Pressable>
+            )}
+          </View>
+
+          {selectedImage && (
+            <Pressable
+              onPress={handleProcessInvoice}
+              disabled={processing}
+              style={[
+                styles.processButton,
+                processing && styles.processButtonDisabled,
+              ]}
+            >
+              <Text style={styles.processButtonText}>
+                {processing ? 'מעבד...' : 'עבד חשבונית'}
+              </Text>
+            </Pressable>
+          )}
+
+          {error && (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          )}
+
+          {extractedData && (
+            <View style={styles.extractedDataContainer}>
+              <Text style={styles.extractedDataTitle}>נתונים שחולצו:</Text>
+
+              {extractedData.vendor && (
+                <View style={styles.extractedDataRow}>
+                  <Text style={styles.extractedDataLabel}>ספק:</Text>
+                  <Text style={styles.extractedDataValue}>{extractedData.vendor}</Text>
+                </View>
+              )}
+
+              {extractedData.date && (
+                <View style={styles.extractedDataRow}>
+                  <Text style={styles.extractedDataLabel}>תאריך:</Text>
+                  <Text style={styles.extractedDataValue}>{extractedData.date}</Text>
+                </View>
+              )}
+
+              {extractedData.invoice_number && (
+                <View style={styles.extractedDataRow}>
+                  <Text style={styles.extractedDataLabel}>מספר חשבונית:</Text>
+                  <Text style={styles.extractedDataValue}>{extractedData.invoice_number}</Text>
+                </View>
+              )}
+
+              <View style={styles.extractedDataSection}>
+                <Text style={styles.extractedDataSectionTitle}>פריטים:</Text>
+                {extractedData.items && extractedData.items.length > 0 ? (
+                  <View style={styles.itemsList}>
+                    {extractedData.items.map((item, index) => (
+                      <View key={index} style={styles.itemRow}>
+                        <View style={styles.itemDetails}>
+                          <Text style={styles.itemName}>{item.name}</Text>
+                          {item.quantity > 0 && (
+                            <Text style={styles.itemQuantity}>
+                              כמות: {item.quantity} × {formatMoney(item.unit_price, extractedData.currency)}
+                            </Text>
+                          )}
+                        </View>
+                        <Text style={styles.itemTotalPrice}>
+                          {formatMoney(item.total_price || (item.unit_price * (item.quantity || 1)), extractedData.currency)}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={styles.noItemsText}>לא נמצאו פריטים</Text>
+                )}
+              </View>
+
+              <View style={styles.totalPriceContainer}>
+                <Text style={styles.totalPriceLabel}>סכום כולל:</Text>
+                <Text style={styles.totalPriceValue}>
+                  {formatMoney(extractedData.total_price, extractedData.currency)}
+                </Text>
+              </View>
+            </View>
+          )}
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -6262,6 +7107,21 @@ const styles = StyleSheet.create({
   ctaOutline: {
     flex: 1,
     borderColor: 'rgba(255,255,255,0.65)',
+  },
+  testNotificationButton: {
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(56, 189, 248, 0.2)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.4)',
+    alignItems: 'center',
+  },
+  testNotificationButtonText: {
+    color: '#e0f2fe',
+    fontSize: 14,
+    fontWeight: '600',
   },
   optionGrid: {
     flexDirection: 'row-reverse',
@@ -7919,6 +8779,29 @@ const styles = StyleSheet.create({
   },
   taskImageContainer: {
     marginTop: 8,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  taskDetailImage: {
+    width: '100%',
+    height: 300,
+  },
+  taskImagePreviewContainer: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginBottom: 8,
+  },
+  taskImagePreview: {
+    width: '100%',
+    height: '100%',
   },
   taskImagePlaceholder: {
     backgroundColor: '#f8fafc',
@@ -7970,6 +8853,39 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: 'center',
+  },
+  closeTaskButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  taskClosedIndicator: {
+    marginTop: 12,
+    backgroundColor: '#dbeafe',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+  },
+  taskClosedIndicatorText: {
+    color: '#3b82f6',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  taskClosedButton: {
+    backgroundColor: '#dbeafe',
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+  },
+  taskClosedButtonText: {
+    color: '#3b82f6',
+    fontSize: 16,
+    fontWeight: '700',
   },
   closeTaskButtonText: {
     color: '#fff',
@@ -8047,6 +8963,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    maxHeight: '80%',
   },
   modalCard: {
     width: '100%',
@@ -8552,6 +9476,644 @@ const styles = StyleSheet.create({
     color: '#64748b',
     fontSize: 18,
     fontWeight: '600',
+  },
+  // Invoice Styles
+  invoiceContainer: {
+    padding: 20,
+    gap: 20,
+  },
+  invoiceTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#0f172a',
+    textAlign: 'right',
+  },
+  invoiceSubtitle: {
+    fontSize: 16,
+    color: '#64748b',
+    textAlign: 'right',
+    lineHeight: 24,
+  },
+  imagePreviewContainer: {
+    marginTop: 12,
+  },
+  imagePreview: {
+    width: '100%',
+    height: 300,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#f1f5f9',
+  },
+  imagePreviewOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  processButton: {
+    backgroundColor: '#3b82f6',
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  processButtonDisabled: {
+    backgroundColor: '#94a3b8',
+    opacity: 0.6,
+  },
+  processButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  errorContainer: {
+    backgroundColor: '#fee2e2',
+    borderColor: '#fca5a5',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 16,
+  },
+  errorText: {
+    color: '#dc2626',
+    fontSize: 14,
+    textAlign: 'right',
+  },
+  extractedDataContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    marginTop: 20,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  extractedDataTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#0f172a',
+    textAlign: 'right',
+    marginBottom: 16,
+  },
+  extractedDataRow: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  extractedDataLabel: {
+    fontSize: 14,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  extractedDataValue: {
+    fontSize: 16,
+    color: '#0f172a',
+    fontWeight: '600',
+  },
+  extractedDataSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  extractedDataSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0f172a',
+    textAlign: 'right',
+    marginBottom: 12,
+  },
+  itemsList: {
+    gap: 12,
+  },
+  itemRow: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  itemDetails: {
+    flex: 1,
+    gap: 4,
+  },
+  itemName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0f172a',
+    textAlign: 'right',
+  },
+  itemQuantity: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'right',
+  },
+  itemTotalPrice: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#3b82f6',
+  },
+  noItemsText: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'right',
+    fontStyle: 'italic',
+  },
+  totalPriceContainer: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 2,
+    borderTopColor: '#3b82f6',
+  },
+  totalPriceLabel: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  totalPriceValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#3b82f6',
+  },
+  // Cleaning Schedule Styles
+  scheduleContainer: {
+    padding: 20,
+    gap: 20,
+  },
+  weekNavigation: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  weekNavButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+  },
+  weekNavButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3b82f6',
+  },
+  weekTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  scheduleGrid: {
+    gap: 12,
+  },
+  scheduleDay: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    overflow: 'hidden',
+  },
+  scheduleDayHeader: {
+    backgroundColor: '#f8fafc',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  scheduleDayHeaderToday: {
+    backgroundColor: '#dbeafe',
+    borderBottomColor: '#3b82f6',
+  },
+  scheduleDayName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0f172a',
+    textAlign: 'right',
+  },
+  scheduleDayNameToday: {
+    color: '#3b82f6',
+  },
+  scheduleDayDate: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'right',
+    marginTop: 4,
+  },
+  scheduleDayDateToday: {
+    color: '#3b82f6',
+    fontWeight: '600',
+  },
+  scheduleDayContent: {
+    maxHeight: 200,
+    padding: 8,
+  },
+  scheduleEmptyText: {
+    fontSize: 14,
+    color: '#94a3b8',
+    textAlign: 'center',
+    paddingVertical: 16,
+    fontStyle: 'italic',
+  },
+  scheduleEntry: {
+    backgroundColor: '#f1f5f9',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  scheduleEntryTime: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0f172a',
+    textAlign: 'right',
+    marginBottom: 4,
+  },
+  scheduleEntryCleaner: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3b82f6',
+    textAlign: 'right',
+  },
+  addEntryButton: {
+    backgroundColor: '#10b981',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  addEntryButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  // New Inventory Order Styles
+  orderSearchSection: {
+    marginBottom: 20,
+  },
+  searchContainer: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#0f172a',
+  },
+  searchIcon: {
+    fontSize: 18,
+    marginLeft: 12,
+  },
+  selectedItemsCard: {
+    backgroundColor: '#f0f9ff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: '#bae6fd',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  selectedItemsHeader: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  selectedItemsTotal: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3b82f6',
+  },
+  selectedItemsList: {
+    maxHeight: 200,
+  },
+  selectedItemCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  selectedItemInfo: {
+    flex: 1,
+  },
+  selectedItemName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0f172a',
+    textAlign: 'right',
+  },
+  selectedItemCategory: {
+    fontSize: 12,
+    color: '#64748b',
+    textAlign: 'right',
+    marginTop: 2,
+  },
+  selectedItemControls: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
+  quantityButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  quantityButtonText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  quantityInputSelected: {
+    width: 50,
+    height: 32,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0f172a',
+  },
+  selectedItemUnit: {
+    fontSize: 12,
+    color: '#64748b',
+    marginRight: 4,
+  },
+  removeItemButtonNew: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#fee2e2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  removeItemButtonTextNew: {
+    color: '#dc2626',
+    fontSize: 20,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  itemsListSection: {
+    marginBottom: 24,
+  },
+  itemCardNew: {
+    width: '48%',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  itemCardSelected: {
+    borderColor: '#a78bfa',
+    borderWidth: 2,
+    backgroundColor: '#faf5ff',
+  },
+  itemCardHeader: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  itemCardName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0f172a',
+    flex: 1,
+    textAlign: 'right',
+  },
+  itemCardBadge: {
+    backgroundColor: '#f1f5f9',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  itemCardBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  itemCardInfo: {
+    marginBottom: 10,
+  },
+  itemCardStock: {
+    fontSize: 12,
+    color: '#475569',
+    textAlign: 'right',
+    marginBottom: 2,
+  },
+  itemCardMinStock: {
+    fontSize: 11,
+    color: '#f59e0b',
+    textAlign: 'right',
+  },
+  itemCardSelectedIndicator: {
+    backgroundColor: '#ede9fe',
+    borderRadius: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    marginBottom: 8,
+  },
+  itemCardSelectedText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#7c3aed',
+    textAlign: 'right',
+  },
+  itemQuantitySelector: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
+  quantityInputContainer: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    backgroundColor: '#fff',
+  },
+  quantityInputSmall: {
+    flex: 1,
+    paddingVertical: 6,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0f172a',
+    textAlign: 'center',
+  },
+  quantityUnitText: {
+    fontSize: 11,
+    color: '#64748b',
+    marginLeft: 4,
+  },
+  addItemButton: {
+    backgroundColor: '#a78bfa',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  addItemButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  emptyStateNew: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  emptyStateTextNew: {
+    fontSize: 15,
+    color: '#94a3b8',
+    textAlign: 'center',
+  },
+  orderDetailsCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  saveOrderButtonDisabled: {
+    backgroundColor: '#cbd5e1',
+    opacity: 0.6,
+  },
+  modalOption: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  modalOptionSelected: {
+    backgroundColor: '#ede9fe',
+    borderColor: '#a78bfa',
+    borderWidth: 2,
+  },
+  modalOptionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#475569',
+    textAlign: 'right',
+  },
+  modalOptionTextSelected: {
+    color: '#7c3aed',
+  },
+  modalCancelButton: {
+    marginTop: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 12,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  modalCancelButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  // Simple Order List Styles
+  simpleOrderList: {
+    marginBottom: 20,
+  },
+  simpleOrderItem: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 16,
+    marginBottom: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  simpleOrderItemInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  simpleOrderItemName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0f172a',
+    textAlign: 'right',
+    marginBottom: 4,
+  },
+  simpleOrderItemDetails: {
+    fontSize: 13,
+    color: '#64748b',
+    textAlign: 'right',
+  },
+  simpleOrderItemControls: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
+  simpleQuantityInput: {
+    width: 60,
+    height: 40,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0f172a',
+    textAlign: 'center',
+  },
+  simpleOrderUnit: {
+    fontSize: 13,
+    color: '#64748b',
+    minWidth: 30,
+    textAlign: 'right',
   },
 });
 
