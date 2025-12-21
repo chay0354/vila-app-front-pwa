@@ -1,32 +1,21 @@
-// Base API URL for the backend - reads from .env file
-// Try to use react-native-dotenv first, then fallback to process.env
-let apiBaseUrl: string | undefined;
+// Base API URL for the backend.
+// Uses react-native-config to read from .env file
+const DEFAULT_API_URL = 'https://vila-app-back.vercel.app';
+
+let apiUrl = DEFAULT_API_URL;
 
 try {
-  // Try to import from @env (react-native-dotenv)
-  const envModule = require('@env');
-  apiBaseUrl = envModule.API_BASE_URL;
-} catch (e) {
-  // If @env is not available, try process.env
-  try {
-    // @ts-expect-error process may be undefined on RN
-    if (typeof process !== 'undefined' && process.env && process.env.API_BASE_URL) {
-      // @ts-expect-error RN env
-      apiBaseUrl = process.env.API_BASE_URL;
-    }
-  } catch (e2) {
-    // Ignore
+  // Try to import react-native-config
+  const Config = require('react-native-config').default || require('react-native-config');
+  if (Config && Config.API_BASE_URL) {
+    apiUrl = Config.API_BASE_URL;
   }
+} catch (e) {
+  // If react-native-config is not available, use default
+  console.warn('react-native-config not available, using default API URL');
 }
 
-// API URL must be set - no fallback
-if (!apiBaseUrl) {
-  console.error('❌ ERROR: API_BASE_URL is not set in .env file!');
-  throw new Error('API_BASE_URL environment variable is required. Please set it in .env file.');
-}
-
-export const API_BASE_URL = apiBaseUrl;
-
-// Log the API URL being used (for debugging)
-console.log('🔗 API Base URL:', API_BASE_URL);
+// Remove all trailing slashes - endpoints already start with /
+apiUrl = String(apiUrl).trim().replace(/\/+$/, '');
+export const API_BASE_URL = apiUrl;
 

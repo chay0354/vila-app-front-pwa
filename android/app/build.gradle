@@ -122,4 +122,9 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+    
+    // Exclude old Android Support Library to avoid duplicate class errors
+    configurations.all {
+        exclude group: 'com.android.support', module: 'support-v4'
+    }
 }

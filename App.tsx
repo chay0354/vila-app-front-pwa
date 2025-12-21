@@ -19,17 +19,34 @@ import {
   TextInput,
   View,
   Platform,
+  PermissionsAndroid,
 } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
-import PushNotification from 'react-native-push-notification';
+import Video from 'react-native-video';
 import {
   SafeAreaProvider,
   SafeAreaView,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
+// Import Notifee for simple push notifications - handle gracefully if not available
+let notifee: any = null;
+let AndroidImportance: any = null;
+try {
+  const notifeeModule = require('@notifee/react-native');
+  notifee = notifeeModule.default || notifeeModule;
+  AndroidImportance = notifeeModule.AndroidImportance;
+  if (!notifee || typeof notifee.displayNotification !== 'function') {
+    console.warn('Notifee module loaded but displayNotification not available');
+    notifee = null;
+  }
+} catch (e) {
+  console.warn('Notifee not available, will use Alert fallback:', e);
+  notifee = null;
+}
+
 import { API_BASE_URL } from './src/apiConfig';
 
-type Screen = 'home' | 'signin' | 'signup' | 'hub' | 'orders' | 'orderEdit' | 'exitInspections' | 'warehouse' | 'warehouseMenu' | 'warehouseOrders' | 'warehouseInventory' | 'warehouseInventoryDetail' | 'newWarehouse' | 'newWarehouseItem' | 'newWarehouseOrder' | 'maintenance' | 'maintenanceTasks' | 'maintenanceTaskDetail' | 'newMaintenanceTask' | 'reports' | 'chat' | 'attendance';
+type Screen = 'home' | 'signin' | 'signup' | 'hub' | 'orders' | 'orderEdit' | 'exitInspections' | 'warehouse' | 'warehouseMenu' | 'warehouseOrders' | 'warehouseInventory' | 'warehouseInventoryDetail' | 'newWarehouse' | 'newWarehouseItem' | 'newWarehouseOrder' | 'maintenance' | 'maintenanceTasks' | 'maintenanceTaskDetail' | 'newMaintenanceTask' | 'reports' | 'chat' | 'attendance' | 'invoices' | 'cleaningSchedule';
 type OrderStatus = 'חדש' | 'באישור' | 'שולם חלקית' | 'שולם' | 'בוטל';
 type InspectionStatus =
   | 'זמן הביקורות טרם הגיע'
@@ -77,18 +94,29 @@ type InventoryItem = {
   minStock: number;
 };
 
-type InventoryOrder = {
+type InventoryOrderItem = {
   id: string;
-  itemId: string;
+  itemId?: string;
   itemName: string;
   quantity: number;
   unit: string;
+};
+
+type InventoryOrder = {
+  id: string;
   orderDate: string;
   deliveryDate?: string;
   status: 'ממתין לאישור' | 'מאושר' | 'בהזמנה' | 'התקבל' | 'בוטל';
   orderType: 'הזמנת עובד' | 'הזמנה כללית';
   orderedBy?: string;
   unitNumber?: string;
+  items: InventoryOrderItem[]; // Items in this order
+  // Legacy fields for backward compatibility during migration
+  itemId?: string;
+  itemName?: string;
+  quantity?: number;
+  unit?: string;
+  orderGroupId?: string;
 };
 
 type MaintenanceStatus = 'פתוח' | 'בטיפול' | 'סגור';
@@ -263,45 +291,6 @@ const initialMaintenanceUnits: MaintenanceUnit[] = UNIT_NAMES.map(name => ({
   tasks: [],
 }));
 
-// Initialize push notifications (local notifications only, no Firebase)
-try {
-  PushNotification.configure({
-    onRegister: function (token: any) {
-      console.log('Push notification token:', token);
-    },
-    onNotification: function (notification: any) {
-      console.log('Notification received:', notification);
-    },
-    permissions: {
-      alert: true,
-      badge: true,
-      sound: true,
-    },
-    popInitialNotification: false,
-    requestPermissions: false, // Don't request permissions automatically to avoid Firebase error
-  });
-
-  // Create notification channel for Android (required for Android 8.0+)
-  if (Platform.OS === 'android') {
-    PushNotification.createChannel(
-      {
-        channelId: 'bolavila-notifications',
-        channelName: 'BolaVila Notifications',
-        channelDescription: 'Notifications for chat messages and task assignments',
-        playSound: true,
-        soundName: 'default',
-        importance: 4,
-        vibrate: true,
-      },
-      (created: boolean) => {
-        console.log(`Notification channel ${created ? 'created' : 'already exists'}`);
-      }
-    );
-  }
-} catch (error) {
-  console.error('Failed to configure push notifications:', error);
-}
-
 function App() {
   return (
     <SafeAreaProvider>
@@ -312,33 +301,6 @@ function App() {
 
 function AppContent() {
   const safeAreaInsets = useSafeAreaInsets();
-  
-  // Helper function to send local notification
-  const sendLocalNotification = (title: string, message: string) => {
-    try {
-      const notificationConfig: any = {
-        title: title,
-        message: message,
-        playSound: true,
-        soundName: 'default',
-        vibrate: true,
-        vibration: 300,
-        userInfo: { id: Date.now().toString() },
-      };
-      
-      // Add channelId for Android
-      if (Platform.OS === 'android') {
-        notificationConfig.channelId = 'bolavila-notifications';
-      }
-      
-      // Send notification
-      PushNotification.localNotification(notificationConfig);
-    } catch (error: any) {
-      console.error('Failed to send notification:', error);
-      throw error;
-    }
-  };
-  
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -366,8 +328,74 @@ function AppContent() {
   const [reportsSummary, setReportsSummary] = useState<{totalRevenue: number; totalPaid: number; totalExpenses: number} | null>(null);
   const [reportsSummaryError, setReportsSummaryError] = useState<string | null>(null);
   const [maintenanceTasksReport, setMaintenanceTasksReport] = useState<any[]>([]);
+  // Track previous state for notifications
+  const [previousMaintenanceTasks, setPreviousMaintenanceTasks] = useState<any[]>([]);
+  const [previousChatMessages, setPreviousChatMessages] = useState<Array<{id: number; sender: string; content: string; created_at: string}>>([]);
   const statusBarStyle = screen === 'home' ? 'light-content' : 'dark-content';
   const statusBar = <StatusBar barStyle={statusBarStyle} />;
+
+  // Initialize push notifications using Notifee (simple and reliable)
+  useEffect(() => {
+    const initializeNotifications = async () => {
+      // Check if Notifee is available
+      if (!notifee) {
+        console.warn('Notifee not available - notifications will use Alert fallback');
+        return;
+      }
+
+      try {
+        // Request permissions
+        if (Platform.OS === 'android' && notifee.requestPermission) {
+          await notifee.requestPermission();
+        }
+
+        // Create a channel for Android
+        if (Platform.OS === 'android' && notifee.createChannel && AndroidImportance) {
+          await notifee.createChannel({
+            id: 'default',
+            name: 'התראות מערכת',
+            importance: AndroidImportance.HIGH,
+            sound: 'default',
+            vibration: true,
+          });
+        }
+
+        console.log('Notifications initialized successfully');
+      } catch (error) {
+        console.warn('Error initializing notifications:', error);
+        // Continue without notifications - will use Alert fallback
+      }
+    };
+
+    initializeNotifications();
+  }, []);
+
+  // Simple notification function using Notifee
+  const showNotification = async (title: string, message: string) => {
+    // Check if Notifee is available
+    if (!notifee || typeof notifee.displayNotification !== 'function') {
+      // Fallback to Alert if Notifee is not available
+      Alert.alert(title, message, [{ text: 'OK' }]);
+      return;
+    }
+
+    try {
+      await notifee.displayNotification({
+        title,
+        body: message,
+        android: {
+          channelId: 'default',
+          importance: AndroidImportance?.HIGH || 4,
+          sound: 'default',
+          vibrationPattern: [300, 500],
+        },
+      });
+    } catch (error) {
+      console.warn('Error showing notification, using Alert fallback:', error);
+      // Fallback to alert if notification fails
+      Alert.alert(title, message, [{ text: 'OK' }]);
+    }
+  };
 
   const systemUserNameById = useMemo(() => {
     const m = new Map<string, string>();
@@ -469,7 +497,28 @@ function AppContent() {
       }
       const data = await res.json();
       // Reverse to show oldest first (backend returns newest first)
-      setChatMessages((data ?? []).reverse());
+      const messages = (data ?? []).reverse();
+      
+      // Check for new messages (not from current user)
+      if (userName && previousChatMessages.length > 0 && messages.length > previousChatMessages.length) {
+        const previousMessageIds = new Set(previousChatMessages.map(m => m.id));
+        const newMessages = messages.filter(m => 
+          !previousMessageIds.has(m.id) && m.sender !== userName
+        );
+        
+        if (newMessages.length > 0) {
+          const latestMessage = newMessages[newMessages.length - 1];
+          showNotification(
+            `הודעה חדשה מ-${latestMessage.sender}`,
+            latestMessage.content.length > 50 
+              ? latestMessage.content.substring(0, 50) + '...' 
+              : latestMessage.content
+          );
+        }
+      }
+      
+      setPreviousChatMessages(messages);
+      setChatMessages(messages);
     } catch (err) {
       console.warn('Error loading chat messages', err);
     }
@@ -511,11 +560,6 @@ function AppContent() {
       
       const responseData = await res.json().catch(() => null);
       console.log('Chat message sent successfully:', responseData);
-      
-      // Send notification to all users (they will receive it when they check messages)
-      // Note: In a real app, you'd send push notifications via backend to specific users
-      // For now, we'll just log it - notifications will be sent when users open the chat
-      
       await loadChatMessages();
     } catch (err: any) {
       console.error('Error sending chat message:', err);
@@ -527,32 +571,28 @@ function AppContent() {
   useEffect(() => {
     if (screen === 'chat') {
       loadChatMessages();
-      let previousMessageIds = new Set(chatMessages.map(m => m.id));
-      
-      // Refresh messages every 5 seconds and check for new messages
-      const interval = setInterval(async () => {
-        await loadChatMessages();
-        // Check for new messages after a short delay
-        setTimeout(() => {
-          const currentMessageIds = new Set(chatMessages.map(m => m.id));
-          const newMessages = chatMessages.filter(m => !previousMessageIds.has(m.id));
-          
-          // Send notification for new messages from other users
-          newMessages.forEach(msg => {
-            if (msg.sender !== userName) {
-              sendLocalNotification(
-                `הודעה חדשה מ-${msg.sender}`,
-                msg.content.substring(0, 50) + (msg.content.length > 50 ? '...' : '')
-              );
-            }
-          });
-          
-          previousMessageIds = currentMessageIds;
-        }, 100);
-      }, 5000);
+      // Refresh messages every 5 seconds
+      const interval = setInterval(loadChatMessages, 5000);
       return () => clearInterval(interval);
     }
-  }, [screen, userName, chatMessages]);
+  }, [screen]);
+
+  // Poll for new messages and assignments when user is logged in (but not on chat screen - it has its own polling)
+  useEffect(() => {
+    if (!userName || screen === 'chat') return;
+    
+    // Load maintenance tasks and chat messages periodically
+    const pollInterval = setInterval(() => {
+      loadMaintenanceTasksReport();
+      loadChatMessages();
+    }, 10000); // Check every 10 seconds
+    
+    // Initial load
+    loadMaintenanceTasksReport();
+    loadChatMessages();
+    
+    return () => clearInterval(pollInterval);
+  }, [userName, screen]);
 
   const loadAttendanceStatus = async () => {
     if (!userName) return;
@@ -622,8 +662,12 @@ function AppContent() {
   useEffect(() => {
     if (screen === 'attendance' && userName) {
       loadAttendanceStatus();
-      // Refresh status every 10 seconds
-      const interval = setInterval(loadAttendanceStatus, 10000);
+      loadAttendanceLogsReport();
+      // Refresh status and logs every 10 seconds
+      const interval = setInterval(() => {
+        loadAttendanceStatus();
+        loadAttendanceLogsReport();
+      }, 10000);
       return () => clearInterval(interval);
     }
   }, [screen, userName]);
@@ -654,7 +698,7 @@ function AppContent() {
 
   const loadAllWarehouseItemsForReports = async () => {
     try {
-      const warehousesRes = await fetch(`${API_BASE_URL}/warehouses`);
+      const warehousesRes = await fetch(`${API_BASE_URL}/api/warehouses`);
       if (!warehousesRes.ok) return;
       const ws = (await warehousesRes.json()) || [];
       setWarehouses(ws);
@@ -710,7 +754,39 @@ function AppContent() {
       const res = await fetch(`${API_BASE_URL}/api/maintenance/tasks`);
       if (!res.ok) return;
       const data = await res.json();
-      setMaintenanceTasksReport(data || []);
+      const tasks = data || [];
+      
+      // Check for new assignments to current user
+      if (userName && previousMaintenanceTasks.length > 0) {
+        const previousTasksMap = new Map(previousMaintenanceTasks.map((t: any) => [t.id, t]));
+        const currentUser = systemUsers.find(u => u.username === userName);
+        const currentUserId = currentUser?.id?.toString();
+        
+        tasks.forEach((t: any) => {
+          const prevTask = previousTasksMap.get(t.id);
+          const currentAssignedTo = (t.assigned_to || t.assignedTo || '').toString().trim();
+          const prevAssignedTo = prevTask ? ((prevTask.assigned_to || prevTask.assignedTo || '').toString().trim()) : '';
+          
+          // Check if this task was just assigned to the current user
+          // Assignment happens when: wasn't assigned before OR was assigned to someone else, now assigned to me
+          if (currentAssignedTo && currentAssignedTo !== prevAssignedTo) {
+            // Check if assigned to current user (by username or user ID)
+            const isAssignedToMe = 
+              currentAssignedTo === userName || 
+              (currentUserId && currentAssignedTo === currentUserId);
+            
+            if (isAssignedToMe) {
+              showNotification(
+                'משימה חדשה הוקצתה לך',
+                `משימת תחזוקה חדשה: ${t.title || 'ללא כותרת'}`
+              );
+            }
+          }
+        });
+      }
+      
+      setPreviousMaintenanceTasks(tasks);
+      setMaintenanceTasksReport(tasks);
     } catch (err) {
       console.error('Error loading maintenance tasks for reports:', err);
     }
@@ -769,9 +845,7 @@ function AppContent() {
     try {
       const res = await fetch(`${API_BASE_URL}/api/orders`);
       if (!res.ok) return;
-      const responseData = await res.json();
-      // Handle both array and {status: 'success', orders: [...]} formats
-      const data = Array.isArray(responseData) ? responseData : (responseData.orders || []);
+      const data = await res.json();
       const list = (data || []).map((o: any): Order => ({
         id: o.id,
         guestName: o.guest_name ?? o.guestName ?? '',
@@ -792,53 +866,93 @@ function AppContent() {
     }
   };
 
-  const loadInventoryItems = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/inventory/items`);
-      if (!res.ok) return;
-      const data = await res.json();
-      // Handle both array and {status: 'success', items: [...]} formats
-      const items = Array.isArray(data) ? data : (data.items || []);
-      setInventoryItems(items.map((item: any) => ({
-        id: item.id,
-        name: item.name || '',
-        category: item.category || 'אחר',
-        unit: item.unit || '',
-        currentStock: Number(item.currentStock || item.current_stock || 0),
-        minStock: Number(item.minStock || item.min_stock || 0),
-      })));
-    } catch (err) {
-      console.error('Error loading inventory items:', err);
-    }
-  };
-
   const loadInventoryOrders = async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/inventory/orders`);
       if (!res.ok) return;
       const data = await res.json();
-      // Handle both array and {status: 'success', orders: [...]} formats
-      const ordersData = Array.isArray(data) ? data : (data.orders || []);
-      const list = (ordersData || []).map((o: any): InventoryOrder => {
+      
+      // Handle both new structure (with items array) and old structure (flat)
+      const list = (data || []).map((o: any): InventoryOrder => {
         const status = (o.status ?? 'ממתין לאישור') as InventoryOrder['status'];
         const orderType = (o.order_type ?? o.orderType ?? 'הזמנה כללית') as InventoryOrder['orderType'];
+        
+        // New structure: orders have items array
+        if (o.items && Array.isArray(o.items)) {
+          return {
+            id: o.id,
+            orderDate: o.order_date ?? o.orderDate ?? '',
+            deliveryDate: o.delivery_date ?? o.deliveryDate ?? undefined,
+            status,
+            orderType,
+            orderedBy: o.ordered_by ?? o.orderedBy ?? undefined,
+            unitNumber: normalizeUnitName(o.unit_number ?? o.unitNumber ?? '') || undefined,
+            items: o.items.map((item: any): InventoryOrderItem => ({
+              id: item.id,
+              itemId: item.item_id ?? item.itemId,
+              itemName: item.item_name ?? item.itemName ?? '',
+              quantity: Number(item.quantity ?? 0),
+              unit: item.unit ?? '',
+            })),
+          };
+        }
+        
+        // Old structure: flat order with single item (backward compatibility)
         return {
           id: o.id,
-          itemId: o.item_id ?? o.itemId ?? '',
-          itemName: o.item_name ?? o.itemName ?? '',
-          quantity: Number(o.quantity ?? 0),
-          unit: o.unit ?? '',
           orderDate: o.order_date ?? o.orderDate ?? '',
           deliveryDate: o.delivery_date ?? o.deliveryDate ?? undefined,
           status,
           orderType,
           orderedBy: o.ordered_by ?? o.orderedBy ?? undefined,
           unitNumber: normalizeUnitName(o.unit_number ?? o.unitNumber ?? '') || undefined,
+          items: [{
+            id: o.id + '-item',
+            itemId: o.item_id ?? o.itemId ?? '',
+            itemName: o.item_name ?? o.itemName ?? '',
+            quantity: Number(o.quantity ?? 0),
+            unit: o.unit ?? '',
+          }],
         };
       });
       setInventoryOrders(list);
     } catch (err) {
       console.error('Error loading inventory orders:', err);
+    }
+  };
+
+  const createInventoryOrder = async (order: InventoryOrder) => {
+    try {
+      // New structure: create order with items array
+      const res = await fetch(`${API_BASE_URL}/api/inventory/orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          // Don't send ID - let backend generate UUID
+          orderDate: order.orderDate,
+          deliveryDate: order.deliveryDate,
+          status: order.status,
+          orderType: order.orderType,
+          orderedBy: order.orderedBy,
+          unitNumber: order.unitNumber,
+          items: order.items.map(item => ({
+            itemId: item.itemId,
+            itemName: item.itemName,
+            quantity: item.quantity,
+            unit: item.unit,
+          })),
+        }),
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ detail: 'שגיאה לא ידועה' }));
+        throw new Error(errorData.detail || 'לא ניתן ליצור הזמנה');
+      }
+      const data = await res.json();
+      await loadInventoryOrders();
+      return data;
+    } catch (err: any) {
+      Alert.alert('שגיאה', err.message || 'אירעה שגיאה ביצירת ההזמנה');
+      throw err;
     }
   };
 
@@ -861,8 +975,7 @@ function AppContent() {
     if (screen === 'exitInspections') {
       loadOrders();
     }
-    if (screen === 'warehouseOrders' || screen === 'warehouseInventory' || screen === 'newWarehouseItem') {
-      loadInventoryItems();
+    if (screen === 'warehouseOrders') {
       loadInventoryOrders();
     }
     if (screen === 'maintenance' || screen === 'maintenanceTasks' || screen === 'maintenanceTaskDetail') {
@@ -1020,9 +1133,7 @@ function AppContent() {
       }
       
       // Success - set user and navigate to hub
-      // Backend returns {status: 'success', user: {id, username}}
-      const user = data.user || data;
-      setUserName(user.username || name.trim());
+      setUserName(data.username || name.trim());
       setScreen('hub');
       setName('');
       setPassword('');
@@ -1049,56 +1160,47 @@ function AppContent() {
       const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       
       const newOrderData = {
-        guestName: '',
-        unitNumber: '',
-        arrivalDate: today,
-        departureDate: nextWeek,
+        guest_name: '',
+        unit_number: '',
+        arrival_date: today,
+        departure_date: nextWeek,
         status: 'חדש',
-        guestsCount: 0,
-        specialRequests: '',
-        internalNotes: '',
-        paidAmount: 0,
-        totalAmount: 0,
-        paymentMethod: 'טרם נקבע',
+        guests_count: 0,
+        special_requests: '',
+        internal_notes: '',
+        paid_amount: 0,
+        total_amount: 0,
+        payment_method: null,
       };
 
-      const res = await fetch(`${API_BASE_URL}/api/orders`, {
+      const res = await fetch(`${API_BASE_URL}/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newOrderData),
       });
 
       if (!res.ok) {
-        const errorText = await res.text().catch(() => 'שגיאה לא ידועה');
-        let errorMessage = 'לא ניתן ליצור הזמנה';
-        try {
-          const errorData = JSON.parse(errorText);
-          errorMessage = errorData.detail || errorData.message || errorMessage;
-        } catch {
-          errorMessage = errorText || errorMessage;
-        }
-        Alert.alert('שגיאה', String(errorMessage));
+        const errorData = await res.json().catch(() => ({ detail: 'שגיאה לא ידועה' }));
+        Alert.alert('שגיאה', errorData.detail || 'לא ניתן ליצור הזמנה');
         return;
       }
 
-      const responseData = await res.json();
-      // Backend returns the order object directly
-      const createdOrder = Array.isArray(responseData) ? responseData[0] : responseData;
+      const createdOrder = await res.json();
       
       // Map backend order to frontend order format
       const mappedOrder: Order = {
-        id: createdOrder.id || createdOrder.get?.('id'),
-        guestName: createdOrder.guest_name || createdOrder.guestName || '',
-        unitNumber: normalizeUnitName(createdOrder.unit_number || createdOrder.unitNumber || ''),
-        arrivalDate: createdOrder.arrival_date || createdOrder.arrivalDate || today,
-        departureDate: createdOrder.departure_date || createdOrder.departureDate || nextWeek,
-        status: (createdOrder.status || 'חדש') as OrderStatus,
-        guestsCount: Number(createdOrder.guests_count || createdOrder.guestsCount || 0),
-        specialRequests: createdOrder.special_requests || createdOrder.specialRequests || '',
-        internalNotes: createdOrder.internal_notes || createdOrder.internalNotes || '',
-        paidAmount: Number(createdOrder.paid_amount || createdOrder.paidAmount || 0),
-        totalAmount: Number(createdOrder.total_amount || createdOrder.totalAmount || 0),
-        paymentMethod: createdOrder.payment_method || createdOrder.paymentMethod || 'טרם נקבע',
+        id: createdOrder.id,
+        guestName: createdOrder.guest_name || '',
+        unitNumber: createdOrder.unit_number || '',
+        arrivalDate: createdOrder.arrival_date || today,
+        departureDate: createdOrder.departure_date || nextWeek,
+        status: createdOrder.status || 'חדש',
+        guestsCount: createdOrder.guests_count || 0,
+        specialRequests: createdOrder.special_requests || '',
+        internalNotes: createdOrder.internal_notes || '',
+        paidAmount: createdOrder.paid_amount || 0,
+        totalAmount: createdOrder.total_amount || 0,
+        paymentMethod: createdOrder.payment_method || undefined,
       };
 
       setOrders(prev => [...prev, mappedOrder]);
@@ -1146,39 +1248,6 @@ function AppContent() {
               </Text>
             </View>
 
-            {/* Test Push Notification Button */}
-            <Pressable
-              onPress={() => {
-                try {
-                  sendLocalNotification(
-                    'בדיקת התראות',
-                    'זוהי התראה לבדיקה - אם אתה רואה את זה, ההתראות עובדות!'
-                  );
-                  Alert.alert('הצלחה', 'התראה נשלחה! בדוק את התראות המכשיר.');
-                } catch (err: any) {
-                  Alert.alert('שגיאה', `לא ניתן לשלוח התראה: ${err?.message || 'שגיאה לא ידועה'}`);
-                }
-              }}
-              style={{
-                backgroundColor: 'rgba(56, 189, 248, 0.2)',
-                borderWidth: 1,
-                borderColor: 'rgba(56, 189, 248, 0.4)',
-                borderRadius: 12,
-                padding: 16,
-                marginHorizontal: 20,
-                marginTop: 20,
-                marginBottom: 10,
-                alignItems: 'center',
-              }}
-            >
-              <Text style={{ color: '#e0f2fe', fontSize: 16, fontWeight: '600' }}>
-                🔔 בדיקת התראות
-              </Text>
-              <Text style={{ color: '#bae6fd', fontSize: 12, marginTop: 4 }}>
-                לחץ לבדיקת התראות
-              </Text>
-            </Pressable>
-
             <View style={styles.glassRow}>
               <View style={styles.glassCard}>
                 <Text style={styles.glassTitle}>הזמנות פעילות</Text>
@@ -1212,6 +1281,12 @@ function AppContent() {
                   style={styles.ctaOutline}
                 />
               </View>
+              <Pressable
+                onPress={() => showNotification('בדיקת התראות', 'זוהי הודעת בדיקה. התראות פועלות כהלכה!')}
+                style={styles.testNotificationButton}
+              >
+                <Text style={styles.testNotificationButtonText}>🔔 בדיקת התראות</Text>
+              </Pressable>
             </View>
 
             <View style={styles.tagRow}>
@@ -1453,6 +1528,8 @@ function AppContent() {
               icon="🧾"
               accent="#0ea5e9"
               details={['העלאת PDF/תמונה', 'OCR לזיהוי ספק, תאריך וסכום']}
+              cta="פתח חשבוניות"
+              onPress={() => setScreen('invoices')}
             />
             <OptionCard
               title="צ׳אט פנימי"
@@ -1469,6 +1546,14 @@ function AppContent() {
               details={['התחלה וסיום עבודה', 'מעקב שעות עבודה']}
               cta="פתח שעון נוכחות"
               onPress={() => setScreen('attendance')}
+            />
+            <OptionCard
+              title="סידורי ניקיון"
+              icon="🧹"
+              accent="#10b981"
+              details={['לוח זמנים לניקיון', 'הוספת מנקים ושעות עבודה']}
+              cta="פתח סידורי ניקיון"
+              onPress={() => setScreen('cleaningSchedule')}
             />
           </View>
         </ScrollView>
@@ -1490,19 +1575,19 @@ function AppContent() {
         isNewOrder={isNewOrder}
         onSave={async (id, changes) => {
           try {
-            // Map frontend changes to backend format (use camelCase for backend mapping)
+            // Map frontend changes to backend format
             const backendChanges: any = {
               status: changes.status,
-              paidAmount: changes.paidAmount,
-              paymentMethod: changes.paymentMethod,
-              totalAmount: changes.totalAmount,
-              guestName: changes.guestName,
-              unitNumber: changes.unitNumber,
-              arrivalDate: changes.arrivalDate,
-              departureDate: changes.departureDate,
-              guestsCount: changes.guestsCount,
-              specialRequests: changes.specialRequests,
-              internalNotes: changes.internalNotes,
+              paid_amount: changes.paidAmount,
+              payment_method: changes.paymentMethod,
+              total_amount: changes.totalAmount,
+              guest_name: changes.guestName,
+              unit_number: changes.unitNumber,
+              arrival_date: changes.arrivalDate,
+              departure_date: changes.departureDate,
+              guests_count: changes.guestsCount,
+              special_requests: changes.specialRequests,
+              internal_notes: changes.internalNotes,
             };
 
             const res = await fetch(`${API_BASE_URL}/api/orders/${id}`, {
@@ -1573,10 +1658,33 @@ function AppContent() {
         onAddOrder={(order) => {
           setInventoryOrders(prev => [...prev, order]);
         }}
-        onUpdateOrder={(id, updates) => {
-          setInventoryOrders(prev =>
-            prev.map(o => (o.id === id ? { ...o, ...updates } : o)),
-          );
+        onUpdateOrder={async (id, updates) => {
+          try {
+            // Update via API
+            const res = await fetch(`${API_BASE_URL}/api/inventory/orders/${id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                status: updates.status,
+                delivery_date: updates.deliveryDate,
+                // Map other fields if needed
+              }),
+            });
+            if (!res.ok) {
+              const errorData = await res.json().catch(() => ({ detail: 'שגיאה לא ידועה' }));
+              Alert.alert('שגיאה', errorData.detail || 'לא ניתן לעדכן את ההזמנה');
+              return;
+            }
+            // Update local state immediately for better UX
+            setInventoryOrders(prev =>
+              prev.map(o => (o.id === id ? { ...o, ...updates } : o)),
+            );
+            // Reload orders to get updated data from backend
+            loadInventoryOrders();
+          } catch (err: any) {
+            console.error('Error updating inventory order:', err);
+            Alert.alert('שגיאה', err.message || 'אירעה שגיאה בעדכון ההזמנה');
+          }
         }}
         onBack={() => setScreen('warehouseMenu')}
         onNewOrder={() => setScreen('newWarehouseOrder')}
@@ -1668,23 +1776,15 @@ function AppContent() {
     return (
       <NewWarehouseOrderScreen
         items={inventoryItems}
-        onSave={async (order) => {
-          try {
-            const res = await fetch(`${API_BASE_URL}/api/inventory/orders`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(order),
-            });
-            if (res.ok) {
-              const data = await res.json();
-              await loadInventoryOrders();
-              setScreen('warehouseOrders');
-            } else {
-              const errorText = await res.text();
-              Alert.alert('שגיאה', `לא ניתן ליצור הזמנה: ${errorText}`);
+        onSave={async (orders) => {
+          // Create all items as part of one order
+          // The backend stores each item as a separate row, but they represent one logical order
+          for (let i = 0; i < orders.length; i++) {
+            await createInventoryOrder(orders[i]);
+            // Small delay between orders to ensure unique UUIDs
+            if (i < orders.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, 50));
             }
-          } catch (err: any) {
-            Alert.alert('שגיאה', err.message || 'אירעה שגיאה ביצירת ההזמנה');
           }
         }}
         onCancel={() => setScreen('warehouseOrders')}
@@ -1786,9 +1886,13 @@ function AppContent() {
       <AttendanceScreen
         userName={userName || ''}
         attendanceStatus={attendanceStatus}
+        attendanceLogs={attendanceLogsReport}
         onStart={startAttendance}
         onStop={stopAttendance}
-        onRefresh={loadAttendanceStatus}
+        onRefresh={() => {
+          loadAttendanceStatus();
+          loadAttendanceLogsReport();
+        }}
         onBack={() => setScreen('hub')}
         safeAreaInsets={safeAreaInsets}
         statusBar={statusBar}
@@ -1813,7 +1917,11 @@ function AppContent() {
             const payload: any = {};
             if (updates.status) payload.status = updates.status;
             if (updates.assignedTo !== undefined) payload.assigned_to = updates.assignedTo;
-            if (updates.imageUri !== undefined) payload.image_uri = updates.imageUri;
+            if (updates.imageUri !== undefined) {
+              // If imageUri is null or undefined, send null to remove it
+              // Otherwise send the new URI
+              payload.image_uri = updates.imageUri === null || updates.imageUri === undefined ? null : updates.imageUri;
+            }
             if (updates.title) payload.title = updates.title;
             if (updates.description) payload.description = updates.description;
 
@@ -1824,11 +1932,24 @@ function AppContent() {
             });
             if (!res.ok) {
               const errText = await res.text().catch(() => '');
-              throw new Error(errText || `HTTP ${res.status}`);
+              let errorDetail = errText || `HTTP ${res.status}`;
+              try {
+                const errorData = JSON.parse(errText);
+                errorDetail = errorData.detail || errorData.message || errText;
+              } catch {
+                // Keep original errorDetail
+              }
+              throw new Error(errorDetail);
             }
             await loadMaintenanceUnits();
           } catch (err: any) {
-            Alert.alert('שגיאה', err.message || 'לא ניתן לעדכן משימת תחזוקה');
+            console.error('Error updating task:', err);
+            const errorMessage = err.message || 'לא ניתן לעדכן משימת תחזוקה';
+            if (errorMessage.includes('Network') || errorMessage.includes('network') || errorMessage.includes('fetch') || errorMessage.includes('Failed')) {
+              Alert.alert('שגיאת רשת', 'לא ניתן להתחבר לשרת. בדוק את החיבור לאינטרנט ונסה שוב.');
+            } else {
+              Alert.alert('שגיאה', errorMessage);
+            }
           }
         }}
         onBack={() => setScreen('maintenanceTasks')}
@@ -1851,65 +1972,73 @@ function AppContent() {
         onRefreshUsers={() => loadSystemUsers(true)}
         onSave={async (task) => {
           try {
-            // Use imageUri from media if available (already in data URI format from image picker)
-            const imageUri = task.imageUri || (task.media?.uri?.startsWith('data:') ? task.media.uri : undefined);
-            
-            const payload: any = {
-              unitId: unit.id,
+            // Always send as JSON with imageUri field (works for both images and videos)
+            // For videos, the URI will be a file URI, for images it will be a data URI
+            const jsonPayload: any = {
+              id: task.id,
+              unit_id: unit.id,
               title: task.title,
               description: task.description,
               status: task.status,
-              createdDate: task.createdDate,
+              created_date: task.createdDate,
             };
-            if (task.assignedTo) {
-              payload.assignedTo = task.assignedTo;
-              
-              // Find assigned user name for notification
-              const assignedUser = systemUsers.find(u => u.id === task.assignedTo);
-              const assignedUserName = assignedUser?.username || 'משתמש';
-              
-              // Find current user ID to compare properly
-              const currentUser = systemUsers.find(u => (u.username || '').toString() === userName);
-              const currentUserId = currentUser?.id?.toString();
-              
-              // Always send notification (user requested notifications even for self-assignment)
-              console.log('Sending task assignment notification:', {
-                taskTitle: task.title,
-                assignedTo: task.assignedTo,
-                currentUserId: currentUserId,
-                userName: userName,
-              });
-              
-              sendLocalNotification(
-                'משימת תחזוקה חדשה',
-                `הוקצתה לך משימה חדשה: ${task.title}`
-              );
-              
-              console.log('Notification sent for task:', task.title);
-            }
-            if (imageUri) {
-              payload.imageUri = imageUri;
+            if (task.assignedTo) jsonPayload.assigned_to = task.assignedTo;
+            if (task.media?.uri) {
+              jsonPayload.imageUri = task.media.uri;
             }
             
-            const res = await fetch(`${API_BASE_URL}/api/maintenance/tasks`, {
+            const jsonRes = await fetch(`${API_BASE_URL}/api/maintenance/tasks`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload),
+              body: JSON.stringify(jsonPayload),
             });
-            if (!res.ok) {
-              const errText = await res.text().catch(() => '');
-              throw new Error(errText || `HTTP ${res.status}`);
+            if (!jsonRes.ok) {
+              const errText = await jsonRes.text().catch(() => '');
+              let errorDetail = errText || `HTTP ${jsonRes.status}`;
+              try {
+                const errorData = JSON.parse(errText);
+                errorDetail = errorData.detail || errorData.message || errText;
+              } catch {
+                // Keep original errorDetail
+              }
+              throw new Error(errorDetail);
             }
             await loadMaintenanceUnits();
             setScreen('maintenanceTasks');
           } catch (err: any) {
-            Alert.alert('שגיאה', err.message || 'לא ניתן ליצור משימת תחזוקה');
+            console.error('Error creating task:', err);
+            const errorMessage = err.message || 'לא ניתן ליצור משימת תחזוקה';
+            if (errorMessage.includes('Network') || errorMessage.includes('network') || errorMessage.includes('fetch') || errorMessage.includes('Failed')) {
+              Alert.alert('שגיאת רשת', 'לא ניתן להתחבר לשרת. בדוק את החיבור לאינטרנט ונסה שוב.');
+            } else {
+              Alert.alert('שגיאה', errorMessage);
+            }
           }
         }}
         onCancel={() => setScreen('maintenanceTasks')}
         safeAreaInsets={safeAreaInsets}
         statusBar={statusBar}
         userName={userName || ''}
+      />
+    );
+  }
+
+  if (screen === 'invoices') {
+    return (
+      <InvoicesScreen
+        onBack={() => setScreen('hub')}
+        safeAreaInsets={safeAreaInsets}
+        statusBar={statusBar}
+      />
+    );
+  }
+
+  if (screen === 'cleaningSchedule') {
+    return (
+      <CleaningScheduleScreen
+        onBack={() => setScreen('hub')}
+        safeAreaInsets={safeAreaInsets}
+        statusBar={statusBar}
       />
     );
   }
@@ -3013,7 +3142,7 @@ type WarehouseScreenProps = {
 
 type NewWarehouseOrderScreenProps = {
   items: InventoryItem[];
-  onSave: (order: InventoryOrder) => void;
+  onSave: (orders: InventoryOrder[]) => void;
   onCancel: () => void;
   safeAreaInsets: { top: number };
   statusBar: React.ReactElement;
@@ -3488,52 +3617,36 @@ function WarehouseScreen({
   statusBar,
   userName,
 }: WarehouseScreenProps) {
+  const [expandedOrderGroupId, setExpandedOrderGroupId] = useState<string | null>(null);
+  const [statusChangeGroupId, setStatusChangeGroupId] = useState<string | null>(null);
 
-  const handleToggleOrder = (orderId: string) => {
-    if (expandedOrderId === orderId) {
-      setExpandedOrderId(null);
-      setEditingOrderItems([]);
+  // With new structure, each order already contains its items
+  // No need to group - each order is already a complete order
+  const groupedOrders = useMemo(() => {
+    const groups: Record<string, InventoryOrder[]> = {};
+    // Each order is its own group (since items are already in the order)
+    orders.forEach(order => {
+      groups[order.id] = [order];
+    });
+    return groups;
+  }, [orders]);
+
+  const handleToggleOrder = (groupId: string) => {
+    if (expandedOrderGroupId === groupId) {
+      setExpandedOrderGroupId(null);
     } else {
-      setExpandedOrderId(orderId);
-      const order = orders.find(o => o.id === orderId);
-      if (order) {
-        setEditingOrderItems([{ itemId: order.itemId, quantity: order.quantity }]);
-      }
+      setExpandedOrderGroupId(groupId);
     }
   };
 
-  const handleAddItemToOrder = (itemId: string, quantity: number) => {
-    const existingIndex = editingOrderItems.findIndex(i => i.itemId === itemId);
-    if (existingIndex >= 0) {
-      const updated = [...editingOrderItems];
-      updated[existingIndex].quantity += quantity;
-      setEditingOrderItems(updated);
-    } else {
-      setEditingOrderItems([...editingOrderItems, { itemId, quantity }]);
+  const handleStatusChange = (groupId: string, newStatus: InventoryOrder['status']) => {
+    const groupOrders = groupedOrders[groupId] || [];
+    // Update the order (with new structure, each group has one order)
+    if (groupOrders.length > 0) {
+      onUpdateOrder(groupOrders[0].id, { status: newStatus });
     }
+    setStatusChangeGroupId(null);
   };
-
-  const handleSaveOrder = (orderId: string) => {
-    if (editingOrderItems.length === 0) {
-      Alert.alert('שגיאה', 'יש להוסיף לפחות פריט אחד להזמנה');
-      return;
-    }
-
-    // Update the first item in the order (simplified - in real app would handle multiple items)
-    const firstItem = editingOrderItems[0];
-    const item = items.find(i => i.id === firstItem.itemId);
-    if (item) {
-      onUpdateOrder(orderId, {
-        itemId: firstItem.itemId,
-        itemName: item.name,
-        quantity: firstItem.quantity,
-        unit: item.unit,
-      });
-    }
-    setExpandedOrderId(null);
-    setEditingOrderItems([]);
-  };
-
 
   const getStatusColor = (status: InventoryOrder['status']) => {
     switch (status) {
@@ -3583,54 +3696,119 @@ function WarehouseScreen({
             </Pressable>
           </View>
 
-          {orders.length === 0 ? (
+          {Object.keys(groupedOrders).length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>אין הזמנות כרגע</Text>
             </View>
           ) : (
-            orders.map(order => (
-              <View key={order.id} style={styles.orderCard}>
-                <View style={styles.orderCardHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.orderItemName}>{order.itemName}</Text>
-                    <Text style={styles.orderDetails}>
-                      כמות: {order.quantity} {order.unit}
-                    </Text>
-                    {order.orderedBy && (
-                      <Text style={styles.orderDetails}>
-                        הוזמן על ידי: {order.orderedBy}
-                      </Text>
-                    )}
-                    <Text style={styles.orderDetails}>
-                      תאריך הזמנה: {order.orderDate}
-                    </Text>
-                    {order.deliveryDate && (
-                      <Text style={styles.orderDetails}>
-                        תאריך אספקה: {order.deliveryDate}
-                      </Text>
-                    )}
-                  </View>
-                  <View
-                    style={[
-                      styles.orderStatusBadge,
-                      { backgroundColor: getStatusColor(order.status) + '22' },
-                    ]}
+            Object.entries(groupedOrders).map(([groupId, groupOrders]) => {
+              const order = groupOrders[0]; // With new structure, each group has one order
+              const isExpanded = expandedOrderGroupId === groupId;
+              const isChangingStatus = statusChangeGroupId === groupId;
+              const itemCount = order.items?.length || 0;
+              
+              return (
+                <View key={groupId} style={styles.orderCard}>
+                  <Pressable
+                    onPress={() => handleToggleOrder(groupId)}
+                    style={styles.orderCardHeader}
                   >
-                    <Text
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                        <Text style={styles.orderItemName}>
+                          הזמנה #{order.id.slice(-8)}
+                        </Text>
+                        <Text style={styles.orderItemCount}>
+                          ({itemCount} {itemCount === 1 ? 'פריט' : 'פריטים'})
+                        </Text>
+                      </View>
+                      <Text style={styles.orderDetails}>
+                        תאריך הזמנה: {order.orderDate}
+                      </Text>
+                      {order.orderedBy && (
+                        <Text style={styles.orderDetails}>
+                          הוזמן על ידי: {order.orderedBy}
+                        </Text>
+                      )}
+                      {order.deliveryDate && (
+                        <Text style={styles.orderDetails}>
+                          תאריך אספקה: {order.deliveryDate}
+                        </Text>
+                      )}
+                      {isExpanded && order.items && order.items.length > 0 && (
+                        <View style={{ marginTop: 12 }}>
+                          {order.items.map((item, idx) => (
+                            <View key={item.id || idx} style={styles.orderItemRow}>
+                              <Text style={styles.orderItemName}>{item.itemName}</Text>
+                              <Text style={styles.orderDetails}>
+                                כמות: {item.quantity} {item.unit || ''}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                    <View
                       style={[
-                        styles.orderStatusText,
-                        { color: getStatusColor(order.status) },
+                        styles.orderStatusBadge,
+                        { backgroundColor: getStatusColor(order.status) + '22' },
                       ]}
                     >
-                      {order.status}
-                    </Text>
+                      <Text
+                        style={[
+                          styles.orderStatusText,
+                          { color: getStatusColor(order.status) },
+                        ]}
+                      >
+                        {order.status}
+                      </Text>
+                    </View>
+                  </Pressable>
+                  
+                  <View style={styles.orderCardActions}>
+                    <View style={styles.orderTypeBadge}>
+                      <Text style={styles.orderTypeText}>{order.orderType}</Text>
+                    </View>
+                    {!isChangingStatus ? (
+                      <Pressable
+                        onPress={() => setStatusChangeGroupId(groupId)}
+                        style={styles.changeStatusButton}
+                      >
+                        <Text style={styles.changeStatusButtonText}>שינוי סטטוס</Text>
+                      </Pressable>
+                    ) : (
+                      <View style={styles.statusChangeButtons}>
+                        {(['ממתין לאישור', 'מאושר', 'בהזמנה', 'התקבל', 'בוטל'] as InventoryOrder['status'][]).map(status => (
+                          <Pressable
+                            key={status}
+                            onPress={() => handleStatusChange(groupId, status)}
+                            style={[
+                              styles.statusOptionButton,
+                              order.status === status && styles.statusOptionButtonActive,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.statusOptionText,
+                                order.status === status && styles.statusOptionTextActive,
+                              ]}
+                            >
+                              {status}
+                            </Text>
+                          </Pressable>
+                        ))}
+                        <Pressable
+                          onPress={() => setStatusChangeGroupId(null)}
+                          style={styles.cancelStatusButton}
+                        >
+                          <Text style={styles.cancelStatusButtonText}>ביטול</Text>
+                        </Pressable>
+                      </View>
+                    )}
                   </View>
                 </View>
-                <View style={styles.orderTypeBadge}>
-                  <Text style={styles.orderTypeText}>{order.orderType}</Text>
-                </View>
-              </View>
-            ))
+              );
+            })
           )}
         </View>
       </ScrollView>
@@ -3644,6 +3822,12 @@ type ItemTableRowProps = {
   onAdd: (itemId: string, quantity: number) => void;
 };
 
+type ProductEntry = {
+  id: string;
+  name: string;
+  quantity: string;
+};
+
 function NewWarehouseOrderScreen({
   items,
   onSave,
@@ -3652,50 +3836,79 @@ function NewWarehouseOrderScreen({
   statusBar,
   userName,
 }: NewWarehouseOrderScreenProps) {
-  const [selectedItems, setSelectedItems] = useState<{ itemId: string; quantity: number }[]>([]);
-  const [orderType, setOrderType] = useState<'הזמנת עובד' | 'הזמנה כללית'>('הזמנה כללית');
-  const [deliveryDate, setDeliveryDate] = useState('');
+  const [products, setProducts] = useState<ProductEntry[]>([
+    { id: Date.now().toString(), name: '', quantity: '' }
+  ]);
+  const [saving, setSaving] = useState(false);
 
-  const handleAddItem = (itemId: string, quantity: number) => {
-    const existingIndex = selectedItems.findIndex(i => i.itemId === itemId);
-    if (existingIndex >= 0) {
-      const updated = [...selectedItems];
-      updated[existingIndex].quantity += quantity;
-      setSelectedItems(updated);
-    } else {
-      setSelectedItems([...selectedItems, { itemId, quantity }]);
+  const handleAddProduct = () => {
+    setProducts([...products, { id: Date.now().toString(), name: '', quantity: '' }]);
+  };
+
+  const handleRemoveProduct = (id: string) => {
+    if (products.length > 1) {
+      setProducts(products.filter(p => p.id !== id));
     }
   };
 
-  const handleRemoveItem = (itemId: string) => {
-    setSelectedItems(selectedItems.filter(i => i.itemId !== itemId));
+  const handleProductChange = (id: string, field: 'name' | 'quantity', value: string) => {
+    setProducts(products.map(p => 
+      p.id === id ? { ...p, [field]: value } : p
+    ));
   };
 
-  const handleSave = () => {
-    if (selectedItems.length === 0) {
-      Alert.alert('שגיאה', 'יש להוסיף לפחות פריט אחד להזמנה');
+  const handleSave = async () => {
+    // Filter out empty products
+    const validProducts = products.filter(p => p.name.trim() && p.quantity.trim());
+    
+    if (validProducts.length === 0) {
+      Alert.alert('שגיאה', 'יש להוסיף לפחות פריט אחד עם שם וכמות');
       return;
     }
 
-    // Create order with first item (simplified - in real app would handle multiple items)
-    const firstItem = selectedItems[0];
-    const item = items.find(i => i.id === firstItem.itemId);
-    if (!item) return;
+    // Validate quantities
+    for (const product of validProducts) {
+      const quantity = parseFloat(product.quantity);
+      if (isNaN(quantity) || quantity <= 0) {
+        Alert.alert('שגיאה', `הכמות של "${product.name}" אינה תקינה`);
+        return;
+      }
+    }
 
-    const newOrder: InventoryOrder = {
-      id: `ORD-INV-${Date.now()}`,
-      itemId: item.id,
-      itemName: item.name,
-      quantity: firstItem.quantity,
-      unit: item.unit,
-      orderDate: new Date().toISOString().split('T')[0],
-      deliveryDate: deliveryDate || undefined,
-      status: 'ממתין לאישור',
-      orderType: orderType,
-      orderedBy: orderType === 'הזמנת עובד' ? userName : undefined,
-    };
+    setSaving(true);
+    try {
+      // Create one order with multiple items
+      const orderDate = new Date().toISOString().split('T')[0];
+      
+      const orderItems: InventoryOrderItem[] = validProducts.map(product => {
+        const quantity = parseFloat(product.quantity);
+        return {
+          id: '', // Backend will generate
+          itemId: '', // No item ID for free text products
+          itemName: product.name.trim(),
+          quantity: quantity,
+          unit: '', // No unit for free text products
+        };
+      });
 
-    onSave(newOrder);
+      const newOrder: InventoryOrder = {
+        id: '', // Backend will generate
+        orderDate: orderDate,
+        status: 'ממתין לאישור',
+        orderType: 'הזמנה כללית',
+        items: orderItems,
+      };
+
+      await onSave([newOrder]);
+
+      setSaving(false);
+      Alert.alert('הצלחה', `ההזמנה נוצרה בהצלחה עם ${validProducts.length} פריטים`, [
+        { text: 'אישור', onPress: () => onCancel() }
+      ]);
+    } catch (err: any) {
+      setSaving(false);
+      Alert.alert('שגיאה', err.message || 'אירעה שגיאה ביצירת ההזמנה');
+    }
   };
 
   return (
@@ -3707,102 +3920,69 @@ function NewWarehouseOrderScreen({
         <Pressable onPress={onCancel} style={styles.backButton}>
           <Text style={styles.backButtonText}>← חזרה</Text>
         </Pressable>
+        <Text style={styles.ordersPageTitle}>הזמנה חדשה</Text>
       </View>
+
       <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.warehouseHeader}>
-          <View>
-            <Text style={styles.title}>הזמנה חדשה</Text>
-            <Text style={styles.subtitle}>
-              בחרו פריטים מהמלאי והוסיפו להזמנה
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.itemsTableSection}>
-          <Text style={styles.sectionTitle}>רשימת פריטי מלאי</Text>
-          <View style={styles.itemsTable}>
-            <View style={styles.tableHeader}>
-              <Text style={[styles.tableHeaderText, { flex: 2 }]}>מוצר</Text>
-              <Text style={[styles.tableHeaderText, { flex: 1 }]}>כמות</Text>
-              <Text style={[styles.tableHeaderText, { flex: 1 }]}>פעולה</Text>
-            </View>
-            {items.map(item => {
-              const selectedItem = selectedItems.find(si => si.itemId === item.id);
-              const currentQuantity = selectedItem ? selectedItem.quantity : 0;
-              return (
-                <ItemTableRow
-                  key={item.id}
-                  item={item}
-                  currentQuantity={currentQuantity}
-                  onAdd={handleAddItem}
+        <View style={styles.simpleOrderList}>
+          {products.map((product, index) => (
+            <View key={product.id} style={styles.simpleOrderItem}>
+              <View style={styles.simpleOrderItemInfo}>
+                <TextInput
+                  style={styles.productNameInput}
+                  value={product.name}
+                  onChangeText={(text) => handleProductChange(product.id, 'name', text)}
+                  placeholder="שם המוצר"
+                  placeholderTextColor="#999"
                 />
-              );
-            })}
-          </View>
-        </View>
-
-        {selectedItems.length > 0 && (
-          <View style={styles.selectedItemsSummary}>
-            <Text style={styles.selectedItemsTitle}>פריטים נבחרים:</Text>
-            {selectedItems.map((si, idx) => {
-              const item = items.find(i => i.id === si.itemId);
-              return item ? (
-                <View key={idx} style={styles.selectedItemRow}>
-                  <Text style={styles.selectedItemText}>
-                    {item.name}: {si.quantity} {item.unit}
-                  </Text>
+              </View>
+              <View style={styles.simpleOrderItemControls}>
+                <TextInput
+                  style={styles.simpleQuantityInput}
+                  value={product.quantity}
+                  onChangeText={(text) => handleProductChange(product.id, 'quantity', text)}
+                  placeholder="כמות"
+                  keyboardType="numeric"
+                  textAlign="center"
+                  placeholderTextColor="#999"
+                />
+                {products.length > 1 && (
                   <Pressable
-                    onPress={() => handleRemoveItem(si.itemId)}
-                    style={styles.removeItemButton}
+                    onPress={() => handleRemoveProduct(product.id)}
+                    style={styles.removeProductButton}
                   >
-                    <Text style={styles.removeItemButtonText}>×</Text>
+                    <Text style={styles.removeProductButtonText}>×</Text>
                   </Pressable>
-                </View>
-              ) : null;
-            })}
-          </View>
-        )}
-
-        <View style={styles.orderDetailsSection}>
-          <Text style={styles.sectionTitle}>פרטי הזמנה</Text>
-          
-          <View style={styles.field}>
-            <Text style={styles.label}>סוג הזמנה</Text>
-            <Pressable
-              onPress={() => {
-                setOrderType(
-                  orderType === 'הזמנה כללית' ? 'הזמנת עובד' : 'הזמנה כללית',
-                );
-              }}
-              style={styles.select}
-            >
-              <Text style={styles.selectValue}>{orderType}</Text>
-              <Text style={styles.selectCaret}>▾</Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>תאריך אספקה (אופציונלי)</Text>
-            <TextInput
-              style={styles.input}
-              value={deliveryDate}
-              onChangeText={setDeliveryDate}
-              placeholder="YYYY-MM-DD"
-              textAlign="right"
-            />
-          </View>
+                )}
+              </View>
+            </View>
+          ))}
         </View>
+
+        <Pressable
+          onPress={handleAddProduct}
+          style={styles.addProductButton}
+        >
+          <Text style={styles.addProductButtonText}>+ הוסף פריט</Text>
+        </Pressable>
 
         <View style={styles.orderActions}>
           <Pressable
             onPress={handleSave}
-            style={styles.saveOrderButton}
+            disabled={saving}
+            style={[
+              styles.saveOrderButton,
+              saving && styles.saveOrderButtonDisabled,
+            ]}
           >
-            <Text style={styles.saveOrderButtonText}>צור הזמנה</Text>
+            <Text style={styles.saveOrderButtonText}>
+              {saving ? 'שומר...' : 'צור הזמנה'}
+            </Text>
           </Pressable>
           <Pressable
             onPress={onCancel}
             style={styles.cancelOrderButton}
+            disabled={saving}
           >
             <Text style={styles.cancelOrderButtonText}>ביטול</Text>
           </Pressable>
@@ -3812,46 +3992,6 @@ function NewWarehouseOrderScreen({
   );
 }
 
-function ItemTableRow({ item, currentQuantity = 0, onAdd }: ItemTableRowProps) {
-  const [quantity, setQuantity] = useState('1');
-
-  const handleAdd = () => {
-    const qty = Number(quantity);
-    if (qty > 0) {
-      onAdd(item.id, qty);
-      setQuantity('1');
-    }
-  };
-
-  return (
-    <View style={styles.tableRow}>
-      <View style={[styles.tableCell, { flex: 2 }]}>
-        <Text style={styles.tableCellText}>{item.name}</Text>
-        <Text style={styles.tableCellSubtext}>{item.category} • {item.unit}</Text>
-        {currentQuantity > 0 && (
-          <Text style={styles.currentQuantityText}>
-            נבחר: {currentQuantity} {item.unit}
-          </Text>
-        )}
-      </View>
-      <View style={[styles.tableCell, { flex: 1 }]}>
-        <TextInput
-          style={styles.quantityInput}
-          value={quantity}
-          onChangeText={setQuantity}
-          keyboardType="numeric"
-          placeholder="1"
-          textAlign="center"
-        />
-      </View>
-      <View style={[styles.tableCell, { flex: 1 }]}>
-        <Pressable onPress={handleAdd} style={styles.tableOrderButton}>
-          <Text style={styles.tableOrderButtonText}>הוסף</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
 
 type MaintenanceScreenProps = {
   units: MaintenanceUnit[];
@@ -5448,6 +5588,7 @@ function ChatScreen({
 type AttendanceScreenProps = {
   userName: string;
   attendanceStatus: {is_clocked_in: boolean; session: any} | null;
+  attendanceLogs: any[];
   onStart: () => void;
   onStop: () => void;
   onRefresh: () => void;
@@ -5459,6 +5600,7 @@ type AttendanceScreenProps = {
 function AttendanceScreen({
   userName,
   attendanceStatus,
+  attendanceLogs,
   onStart,
   onStop,
   onRefresh,
@@ -5468,6 +5610,43 @@ function AttendanceScreen({
 }: AttendanceScreenProps) {
   const isClockedIn = attendanceStatus?.is_clocked_in || false;
   const session = attendanceStatus?.session;
+
+  // Filter logs to show only current user's work periods
+  const userWorkPeriods = useMemo(() => {
+    if (!userName || !attendanceLogs) return [];
+    
+    return (attendanceLogs || [])
+      .filter((log: any) => {
+        const emp = log.employee || log.emp || log.user || '';
+        return emp.toString().toLowerCase() === userName.toLowerCase();
+      })
+      .map((log: any) => {
+        const clockIn = log.clock_in ? new Date(log.clock_in) : null;
+        const clockOut = log.clock_out ? new Date(log.clock_out) : null;
+        
+        let duration = '00:00';
+        if (clockIn) {
+          const end = clockOut || new Date();
+          const diffMs = end.getTime() - clockIn.getTime();
+          const hours = Math.floor(diffMs / (1000 * 60 * 60));
+          const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+          duration = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        }
+        
+        return {
+          id: log.id,
+          clockIn: clockIn,
+          clockOut: clockOut,
+          duration: duration,
+          isActive: !clockOut,
+        };
+      })
+      .sort((a, b) => {
+        // Sort by clock in time, newest first
+        if (!a.clockIn || !b.clockIn) return 0;
+        return b.clockIn.getTime() - a.clockIn.getTime();
+      });
+  }, [attendanceLogs, userName]);
 
   const formatTime = (dateString: string) => {
     try {
@@ -5578,6 +5757,53 @@ function AttendanceScreen({
           >
             <Text style={styles.attendanceButtonText}>רענן</Text>
           </Pressable>
+        </View>
+
+        {/* Previous Work Periods - Only Current User */}
+        <View style={styles.attendanceHistorySection}>
+          <Text style={styles.attendanceHistoryTitle}>תקופות עבודה קודמות</Text>
+          {userWorkPeriods.length === 0 ? (
+            <View style={styles.attendanceEmptyState}>
+              <Text style={styles.attendanceEmptyStateText}>אין תקופות עבודה קודמות</Text>
+            </View>
+          ) : (
+            <View style={styles.attendanceHistoryList}>
+              {userWorkPeriods.map((period, index) => (
+                <View key={period.id || index} style={styles.attendanceHistoryItem}>
+                  <View style={styles.attendanceHistoryItemHeader}>
+                    <Text style={styles.attendanceHistoryItemDate}>
+                      {period.clockIn ? formatDate(period.clockIn.toISOString()) : 'תאריך לא ידוע'}
+                    </Text>
+                    {period.isActive && (
+                      <View style={styles.attendanceActiveBadge}>
+                        <Text style={styles.attendanceActiveBadgeText}>פעיל</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.attendanceHistoryItemDetails}>
+                    <View style={styles.attendanceHistoryDetailRow}>
+                      <Text style={styles.attendanceHistoryDetailLabel}>כניסה:</Text>
+                      <Text style={styles.attendanceHistoryDetailValue}>
+                        {period.clockIn ? formatTime(period.clockIn.toISOString()) : '—'}
+                      </Text>
+                    </View>
+                    <View style={styles.attendanceHistoryDetailRow}>
+                      <Text style={styles.attendanceHistoryDetailLabel}>יציאה:</Text>
+                      <Text style={styles.attendanceHistoryDetailValue}>
+                        {period.clockOut ? formatTime(period.clockOut.toISOString()) : '—'}
+                      </Text>
+                    </View>
+                    <View style={styles.attendanceHistoryDetailRow}>
+                      <Text style={styles.attendanceHistoryDetailLabel}>משך זמן:</Text>
+                      <Text style={[styles.attendanceHistoryDetailValue, styles.attendanceHistoryDuration]}>
+                        {period.duration}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -5789,12 +6015,8 @@ function MaintenanceTasksScreen({
                 </View>
               </View>
               {task.imageUri && (
-                <View style={styles.taskImageContainer}>
-                  <Image
-                    source={{ uri: task.imageUri }}
-                    style={styles.taskImageThumbnail}
-                    resizeMode="cover"
-                  />
+                <View style={styles.taskImageIndicator}>
+                  <Text style={styles.taskImageIndicatorText}>📎 מדיה מצורפת</Text>
                 </View>
               )}
             </Pressable>
@@ -5816,6 +6038,9 @@ function MaintenanceTaskDetailScreen({
 }: MaintenanceTaskDetailScreenProps) {
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [closeModalImageUri, setCloseModalImageUri] = useState<string | undefined>(undefined);
+  const [showEditMediaModal, setShowEditMediaModal] = useState(false);
+  const [editMediaUri, setEditMediaUri] = useState<string | undefined>(undefined);
+  const [hasNewMedia, setHasNewMedia] = useState(false);
 
   const handleOpenCloseModal = () => {
     setCloseModalImageUri(undefined);
@@ -5825,27 +6050,73 @@ function MaintenanceTaskDetailScreen({
   const handleCloseModalImageSelect = async () => {
     try {
       const result = await launchImageLibrary({
-        mediaType: 'photo',
+        mediaType: 'mixed', // Allow both photos and videos
         selectionLimit: 1,
         includeBase64: true,
       });
       if (result.didCancel) return;
       const asset = result.assets?.[0];
-      const base64 = asset?.base64;
-      const mime = asset?.type || 'image/jpeg';
-      if (!base64) {
-        Alert.alert('שגיאה', 'לא ניתן לקרוא את התמונה שנבחרה');
+      if (!asset?.uri) {
+        Alert.alert('שגיאה', 'לא נבחר קובץ');
         return;
       }
-      setCloseModalImageUri(`data:${mime};base64,${base64}`);
+      const mime = asset.type || 'image/jpeg';
+      // For videos, use file URI directly (base64 is too large)
+      // For images, use base64 if available
+      const uri = (asset.type?.startsWith('video/') || !asset.base64) 
+        ? asset.uri 
+        : `data:${mime};base64,${asset.base64}`;
+      setCloseModalImageUri(uri);
     } catch (err: any) {
-      Alert.alert('שגיאה', err?.message || 'לא ניתן לבחור תמונה');
+      console.error('Error selecting media:', err);
+      Alert.alert('שגיאה', err?.message || 'לא ניתן לבחור מדיה. בדוק את החיבור לאינטרנט.');
+    }
+  };
+
+  const handleEditMediaSelect = async () => {
+    try {
+      const result = await launchImageLibrary({
+        mediaType: 'mixed', // Allow both photos and videos
+        selectionLimit: 1,
+        includeBase64: true,
+      });
+      if (result.didCancel) return;
+      const asset = result.assets?.[0];
+      if (!asset?.uri) {
+        Alert.alert('שגיאה', 'לא נבחר קובץ');
+        return;
+      }
+      const mime = asset.type || 'image/jpeg';
+      // For videos, use file URI directly (base64 is too large)
+      // For images, use base64 if available
+      const uri = (asset.type?.startsWith('video/') || !asset.base64) 
+        ? asset.uri 
+        : `data:${mime};base64,${asset.base64}`;
+      setEditMediaUri(uri);
+      setHasNewMedia(true); // Mark that new media was selected
+    } catch (err: any) {
+      console.error('Error selecting media:', err);
+      Alert.alert('שגיאה', err?.message || 'לא ניתן לבחור מדיה. בדוק את החיבור לאינטרנט.');
+    }
+  };
+
+  const handleSaveEditMedia = async () => {
+    try {
+      // If editMediaUri is null/undefined, remove the media by sending null
+      // Otherwise, update with new media
+      const imageUriToSave = editMediaUri === null || editMediaUri === undefined ? null : editMediaUri;
+      await onUpdateTask(task.id, { imageUri: imageUriToSave });
+      Alert.alert('הצלחה', imageUriToSave ? 'המדיה עודכנה בהצלחה' : 'המדיה הוסרה בהצלחה');
+      setShowEditMediaModal(false);
+      setHasNewMedia(false); // Reset flag after saving
+    } catch (err: any) {
+      Alert.alert('שגיאה', err.message || 'לא ניתן לעדכן את המדיה');
     }
   };
 
   const handleConfirmClose = () => {
     if (!closeModalImageUri) {
-      Alert.alert('שגיאה', 'יש להעלות תמונה לפני סגירת המשימה');
+      Alert.alert('שגיאה', 'יש להעלות תמונה או וידאו לפני סגירת המשימה');
       return;
     }
     onUpdateTask(task.id, { status: 'סגור', imageUri: closeModalImageUri });
@@ -5920,15 +6191,74 @@ function MaintenanceTaskDetailScreen({
           <View style={styles.taskDetailSection}>
             <Text style={styles.taskDetailLabel}>תיאור:</Text>
             <Text style={styles.taskDetailDescription}>{task.description}</Text>
-            {task.imageUri && (
-              <View style={styles.taskImageContainer}>
-                <Image
-                  source={{ uri: task.imageUri }}
-                  style={styles.taskImageFull}
-                  resizeMode="contain"
-                />
+          </View>
+
+          {/* Display image/video if exists (for both open and closed tasks) */}
+          {task.imageUri && (
+            <View style={styles.taskDetailSection}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <Text style={styles.taskDetailLabel}>
+                  {task.imageUri.startsWith('data:video/') || task.imageUri.includes('.mp4') || task.imageUri.includes('.mov') 
+                    ? 'וידאו:' 
+                    : 'תמונה:'}
+                </Text>
+                <Pressable 
+                  onPress={() => {
+                    setEditMediaUri(task.imageUri);
+                    setHasNewMedia(false); // Reset flag when opening with existing media
+                    setShowEditMediaModal(true);
+                  }}
+                  style={styles.editMediaButton}
+                >
+                  <Text style={styles.editMediaButtonText}>ערוך/העלה</Text>
+                </Pressable>
               </View>
-            )}
+              <View style={styles.taskImageContainer}>
+                {task.imageUri.startsWith('data:video/') || task.imageUri.includes('.mp4') || task.imageUri.includes('.mov') ? (
+                  <Video
+                    source={{ uri: task.imageUri }}
+                    style={styles.taskDetailImage}
+                    controls
+                    resizeMode="contain"
+                    paused={true}
+                    onError={(error) => {
+                      console.error('Video playback error:', error);
+                      Alert.alert('שגיאה', 'לא ניתן לנגן את הוידאו. נסה שוב או החלף את הקובץ.');
+                    }}
+                  />
+                ) : (
+                  <Image
+                    source={{ uri: task.imageUri }}
+                    style={styles.taskDetailImage}
+                    resizeMode="contain"
+                    onError={() => {
+                      Alert.alert('שגיאה', 'לא ניתן לטעון את התמונה. נסה שוב או החלף את הקובץ.');
+                    }}
+                  />
+                )}
+              </View>
+              {task.status === 'סגור' && (
+                <View style={styles.taskClosedIndicator}>
+                  <Text style={styles.taskClosedIndicatorText}>✓ משימה סגורה</Text>
+                </View>
+              )}
+            </View>
+          )}
+          
+          {/* Upload media button - always available */}
+          <View style={styles.taskDetailSection}>
+            <Pressable 
+              onPress={() => {
+                setEditMediaUri(task.imageUri || undefined);
+                setHasNewMedia(false); // Reset flag when opening modal
+                setShowEditMediaModal(true);
+              }}
+              style={styles.addMediaButton}
+            >
+              <Text style={styles.addMediaButtonText}>
+                {task.imageUri ? 'ערוך/החלף תמונה/וידאו' : '+ הוסף תמונה/וידאו'}
+              </Text>
+            </Pressable>
           </View>
 
           {task.status !== 'סגור' && (
@@ -5936,6 +6266,14 @@ function MaintenanceTaskDetailScreen({
               <Pressable onPress={handleOpenCloseModal} style={styles.closeTaskButton}>
                 <Text style={styles.closeTaskButtonText}>סגור משימה</Text>
               </Pressable>
+            </View>
+          )}
+
+          {task.status === 'סגור' && !task.imageUri && (
+            <View style={styles.taskActions}>
+              <View style={styles.taskClosedButton}>
+                <Text style={styles.taskClosedButtonText}>✓ משימה סגורה</Text>
+              </View>
             </View>
           )}
         </View>
@@ -5951,46 +6289,156 @@ function MaintenanceTaskDetailScreen({
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>סגירת משימה</Text>
             <Text style={styles.modalSubtitle}>
-              על מנת לסגור את המשימה, יש להעלות תמונה
+              על מנת לסגור את המשימה, יש להעלות תמונה או וידאו
             </Text>
 
             <View style={styles.field}>
-              <Text style={styles.label}>תמונה *</Text>
+              <Text style={styles.label}>תמונה/וידאו *</Text>
               {closeModalImageUri ? (
                 <View style={styles.closeModalImageContainer}>
-                  <View style={styles.taskImagePlaceholder}>
-                    <Text style={styles.taskImagePlaceholderText}>📷 תמונה נבחרה</Text>
+                  <View style={styles.taskImagePreviewContainer}>
+                    {closeModalImageUri.startsWith('data:video/') || closeModalImageUri.includes('.mp4') || closeModalImageUri.includes('.mov') ? (
+                      <Video
+                        source={{ uri: closeModalImageUri }}
+                        style={styles.taskImagePreview}
+                        controls
+                        resizeMode="contain"
+                        paused={false}
+                      />
+                    ) : (
+                      <Image
+                        source={{ uri: closeModalImageUri }}
+                        style={styles.taskImagePreview}
+                        resizeMode="contain"
+                      />
+                    )}
                   </View>
+                  <View style={styles.closeModalButtonsGrid}>
+                    <Pressable
+                      onPress={handleCloseModalImageSelect}
+                      style={[styles.closeModalGridButton, styles.changeImageButton]}
+                    >
+                      <Text style={styles.changeImageButtonText}>החלף</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={handleCloseModalImageSelect}
+                      style={[styles.closeModalGridButton, styles.uploadImageButton]}
+                    >
+                      <Text style={styles.uploadImageButtonText}>העלה אחר</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={handleConfirmClose}
+                      style={[styles.closeModalGridButton, styles.closeTaskButton]}
+                    >
+                      <Text style={styles.closeTaskButtonText}>סגור משימה</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => setShowCloseModal(false)}
+                      style={[styles.closeModalGridButton, styles.modalButtonGhost]}
+                    >
+                      <Text style={styles.modalButtonGhostText}>ביטול</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : (
+                <View>
                   <Pressable
                     onPress={handleCloseModalImageSelect}
-                    style={styles.changeImageButton}
+                    style={styles.uploadImageButton}
                   >
-                    <Text style={styles.changeImageButtonText}>החלף תמונה</Text>
+                    <Text style={styles.uploadImageButtonText}>+ העלה תמונה/וידאו</Text>
                   </Pressable>
+                </View>
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Edit Media Modal */}
+      <Modal
+        visible={showEditMediaModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowEditMediaModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>עריכת מדיה</Text>
+            <Text style={styles.modalSubtitle}>
+              בחר תמונה או וידאו חדש
+            </Text>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>תמונה/וידאו</Text>
+              {editMediaUri ? (
+                <View style={styles.closeModalImageContainer}>
+                  <View style={styles.taskImagePreviewContainer}>
+                    {editMediaUri.startsWith('data:video/') || editMediaUri.includes('.mp4') || editMediaUri.includes('.mov') ? (
+                      <Video
+                        source={{ uri: editMediaUri }}
+                        style={styles.taskImagePreview}
+                        controls
+                        resizeMode="contain"
+                        paused={true}
+                      />
+                    ) : (
+                      <Image
+                        source={{ uri: editMediaUri }}
+                        style={styles.taskImagePreview}
+                        resizeMode="contain"
+                      />
+                    )}
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                    <Pressable
+                      onPress={handleEditMediaSelect}
+                      style={styles.changeImageButton}
+                    >
+                      <Text style={styles.changeImageButtonText}>החלף</Text>
+                    </Pressable>
+                  </View>
                 </View>
               ) : (
                 <Pressable
-                  onPress={handleCloseModalImageSelect}
+                  onPress={handleEditMediaSelect}
                   style={styles.uploadImageButton}
                 >
-                  <Text style={styles.uploadImageButtonText}>+ העלה תמונה</Text>
+                  <Text style={styles.uploadImageButtonText}>+ העלה תמונה/וידאו</Text>
                 </Pressable>
               )}
             </View>
 
             <View style={styles.modalButtons}>
-              <Pressable
-                onPress={handleConfirmClose}
-                style={[styles.modalButton, styles.modalButtonPrimary]}
-              >
-                <Text style={styles.modalButtonText}>אישור וסגירה</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setShowCloseModal(false)}
-                style={[styles.modalButton, styles.modalButtonGhost]}
-              >
-                <Text style={styles.modalButtonGhostText}>ביטול</Text>
-              </Pressable>
+              {editMediaUri ? (
+                <>
+                  <Pressable
+                    onPress={handleSaveEditMedia}
+                    style={[styles.modalButton, styles.modalButtonPrimary, { flex: 1 }]}
+                  >
+                    <Text style={styles.modalButtonText}>אישור</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => {
+                      setShowEditMediaModal(false);
+                      setHasNewMedia(false); // Reset flag when closing
+                    }}
+                    style={[styles.modalButton, styles.modalButtonGhost]}
+                  >
+                    <Text style={styles.modalButtonGhostText}>ביטול</Text>
+                  </Pressable>
+                </>
+              ) : (
+                <Pressable
+                  onPress={() => {
+                    setShowEditMediaModal(false);
+                    setHasNewMedia(false); // Reset flag when closing
+                  }}
+                  style={[styles.modalButton, styles.modalButtonGhost, { flex: 1 }]}
+                >
+                  <Text style={styles.modalButtonGhostText}>ביטול</Text>
+                </Pressable>
+              )}
             </View>
           </View>
         </View>
@@ -6026,7 +6474,7 @@ function NewMaintenanceTaskScreen({
   const handlePickMedia = async () => {
     try {
       const result = await launchImageLibrary({
-        mediaType: 'photo',
+        mediaType: 'mixed', // Allow both photos and videos
         selectionLimit: 1,
         includeBase64: true,
       });
@@ -6038,13 +6486,12 @@ function NewMaintenanceTaskScreen({
       }
       const mime = asset.type || 'image/jpeg';
       const name = asset.fileName || `media-${Date.now()}`;
-      // If base64 is available, create data URI
-      if (asset.base64) {
-        const dataUri = `data:${mime};base64,${asset.base64}`;
-        setMedia({ uri: dataUri, type: mime, name });
-      } else {
-        setMedia({ uri: asset.uri, type: mime, name });
-      }
+      // For videos, use file URI directly (base64 is too large)
+      // For images, use base64 if available
+      const uri = (asset.type?.startsWith('video/') || !asset.base64) 
+        ? asset.uri 
+        : `data:${mime};base64,${asset.base64}`;
+      setMedia({ uri, type: mime, name });
     } catch (err: any) {
       Alert.alert('שגיאה', err?.message || 'לא ניתן לבחור מדיה');
     }
@@ -6138,20 +6585,36 @@ function NewMaintenanceTaskScreen({
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>מדיה (תמונה/וידאו)</Text>
+            <Text style={styles.label}>תמונה/וידאו</Text>
             {media ? (
               <View style={styles.closeModalImageContainer}>
-                <Image
-                  source={{ uri: media.uri }}
-                  style={styles.taskImageThumbnail}
-                  resizeMode="cover"
-                />
-                <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                <View style={styles.taskImagePreviewContainer}>
+                  {media.type?.startsWith('video/') || media.uri.includes('.mp4') || media.uri.includes('.mov') ? (
+                    <Video
+                      source={{ uri: media.uri }}
+                      style={styles.taskImagePreview}
+                      controls
+                      resizeMode="contain"
+                      paused={true}
+                      onError={(error) => {
+                        console.error('Video playback error:', error);
+                        Alert.alert('שגיאה', 'לא ניתן לנגן את הוידאו. נסה שוב או החלף את הקובץ.');
+                      }}
+                    />
+                  ) : (
+                    <Image
+                      source={{ uri: media.uri }}
+                      style={styles.taskImagePreview}
+                      resizeMode="contain"
+                      onError={() => {
+                        Alert.alert('שגיאה', 'לא ניתן לטעון את התמונה. נסה שוב או החלף את הקובץ.');
+                      }}
+                    />
+                  )}
+                </View>
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
                   <Pressable onPress={handlePickMedia} style={styles.changeImageButton}>
                     <Text style={styles.changeImageButtonText}>החלף</Text>
-                  </Pressable>
-                  <Pressable onPress={() => setMedia(null)} style={styles.cancelOrderButton}>
-                    <Text style={styles.cancelOrderButtonText}>הסר</Text>
                   </Pressable>
                 </View>
               </View>
@@ -6222,6 +6685,1064 @@ function NewMaintenanceTaskScreen({
           </View>
         </View>
       </Modal>
+    </SafeAreaView>
+  );
+}
+
+type CleaningScheduleEntry = {
+  id: string;
+  date: string; // YYYY-MM-DD
+  start_time: string; // HH:MM
+  end_time: string; // HH:MM
+  cleaner_name: string;
+  created_at?: string;
+};
+
+type CleaningScheduleScreenProps = {
+  onBack: () => void;
+  safeAreaInsets: { top: number };
+  statusBar: React.ReactElement;
+};
+
+function CleaningScheduleScreen({
+  onBack,
+  safeAreaInsets,
+  statusBar,
+}: CleaningScheduleScreenProps) {
+  const [entries, setEntries] = useState<CleaningScheduleEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [startTime, setStartTime] = useState<string>('');
+  const [endTime, setEndTime] = useState<string>('');
+  const [cleanerName, setCleanerName] = useState<string>('');
+  const [editingEntry, setEditingEntry] = useState<CleaningScheduleEntry | null>(null);
+  const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => {
+    const today = new Date();
+    const day = today.getDay();
+    const diff = today.getDate() - day + (day === 0 ? -6 : 1); // Monday as first day
+    const monday = new Date(today.setDate(diff));
+    monday.setHours(0, 0, 0, 0);
+    return monday;
+  });
+
+  useEffect(() => {
+    loadScheduleEntries();
+  }, []);
+
+  const loadScheduleEntries = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE_URL}/api/cleaning-schedule`);
+      if (!response.ok) {
+        // If 404 or 500, the table might not exist yet - just use empty array
+        if (response.status === 404 || response.status === 500) {
+          console.log('Cleaning schedule table may not exist yet, using empty array');
+          setEntries([]);
+          return;
+        }
+        throw new Error(`Failed to load schedule: ${response.status}`);
+      }
+      const data = await response.json();
+      setEntries(data || []);
+    } catch (err: any) {
+      console.error('Error loading schedule:', err);
+      // Don't show alert for network errors or 404 - just use empty array
+      if (err.message && (err.message.includes('Network') || err.message.includes('fetch'))) {
+        console.log('Network error loading schedule, using empty array');
+        setEntries([]);
+      } else if (err.message && (err.message.includes('404') || err.message.includes('Not Found'))) {
+        console.log('Cleaning schedule table does not exist yet, using empty array');
+        setEntries([]);
+      } else {
+        // Only show alert for unexpected errors, and parse JSON error if present
+        let errorMessage = 'לא ניתן לטעון את לוח הזמנים';
+        try {
+          if (err.message) {
+            const errorMatch = err.message.match(/\{.*\}/);
+            if (errorMatch) {
+              const errorJson = JSON.parse(errorMatch[0]);
+              if (errorJson.detail && errorJson.detail.includes('404')) {
+                // Table doesn't exist - don't show error, just use empty array
+                setEntries([]);
+                return;
+              }
+            }
+          }
+        } catch {
+          // Keep default error message
+        }
+        Alert.alert('שגיאה', errorMessage);
+        setEntries([]);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveEntry = async () => {
+    // When adding, selectedDate is already set from the day selection
+    // When editing, selectedDate should be set from the entry
+    if (!selectedDate || !startTime || !endTime || !cleanerName.trim()) {
+      Alert.alert('שגיאה', 'יש למלא את כל השדות');
+      return;
+    }
+
+    try {
+      const entryData = {
+        date: selectedDate,
+        start_time: startTime,
+        end_time: endTime,
+        cleaner_name: cleanerName.trim(),
+      };
+
+      let response;
+      if (editingEntry) {
+        // Update existing entry
+        response = await fetch(`${API_BASE_URL}/api/cleaning-schedule/${editingEntry.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(entryData),
+        });
+      } else {
+        // Create new entry
+        response = await fetch(`${API_BASE_URL}/api/cleaning-schedule`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(entryData),
+        });
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        let errorMessage = errorText || 'Failed to save entry';
+        try {
+          const errorJson = JSON.parse(errorText);
+          if (errorJson.detail) {
+            errorMessage = errorJson.detail;
+          }
+        } catch {
+          // Keep original errorMessage
+        }
+        // Don't show alert for 404 (table doesn't exist) - just log it
+        if (response.status === 404) {
+          console.log('Cleaning schedule table does not exist yet');
+          Alert.alert('שגיאה', 'טבלת סידורי הניקיון לא קיימת. יש ליצור את הטבלה ב-Supabase תחילה.');
+        } else {
+          throw new Error(errorMessage);
+        }
+        return;
+      }
+
+      await loadScheduleEntries();
+      setShowAddModal(false);
+      setSelectedDate('');
+      setStartTime('');
+      setEndTime('');
+      setCleanerName('');
+      setEditingEntry(null);
+    } catch (err: any) {
+      let errorMessage = err.message || 'לא ניתן לשמור את הרשומה';
+      // Parse JSON error if present
+      try {
+        if (err.message) {
+          const errorMatch = err.message.match(/\{.*\}/);
+          if (errorMatch) {
+            const errorJson = JSON.parse(errorMatch[0]);
+            if (errorJson.detail) {
+              if (errorJson.detail.includes('404') || errorJson.detail.includes('Not Found')) {
+                errorMessage = 'טבלת סידורי הניקיון לא קיימת. יש ליצור את הטבלה ב-Supabase תחילה.';
+              } else {
+                errorMessage = errorJson.detail;
+              }
+            }
+          }
+        }
+      } catch {
+        // Keep original error message
+      }
+      Alert.alert('שגיאה', errorMessage);
+    }
+  };
+
+  const handleDeleteEntry = async (id: string) => {
+    Alert.alert(
+      'מחיקת רשומה',
+      'האם אתה בטוח שברצונך למחוק את הרשומה?',
+      [
+        { text: 'ביטול', style: 'cancel' },
+        {
+          text: 'מחק',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const response = await fetch(`${API_BASE_URL}/api/cleaning-schedule/${id}`, {
+                method: 'DELETE',
+              });
+              if (!response.ok) throw new Error('Failed to delete');
+              await loadScheduleEntries();
+            } catch (err: any) {
+              Alert.alert('שגיאה', 'לא ניתן למחוק את הרשומה');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleEditEntry = (entry: CleaningScheduleEntry) => {
+    setEditingEntry(entry);
+    setSelectedDate(entry.date);
+    setStartTime(entry.start_time);
+    setEndTime(entry.end_time);
+    setCleanerName(entry.cleaner_name);
+    setShowAddModal(true);
+  };
+
+  const getWeekDays = () => {
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(currentWeekStart);
+      date.setDate(currentWeekStart.getDate() + i);
+      days.push(date);
+    }
+    return days;
+  };
+
+  const getEntriesForDate = (date: Date) => {
+    const dateStr = date.toISOString().split('T')[0];
+    return entries.filter(e => e.date === dateStr).sort((a, b) => 
+      a.start_time.localeCompare(b.start_time)
+    );
+  };
+
+  const formatDate = (date: Date) => {
+    const dayNames = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+    return dayNames[date.getDay()];
+  };
+
+  const formatDateShort = (date: Date) => {
+    return `${date.getDate()}/${date.getMonth() + 1}`;
+  };
+
+  const navigateWeek = (direction: 'prev' | 'next') => {
+    const newDate = new Date(currentWeekStart);
+    newDate.setDate(currentWeekStart.getDate() + (direction === 'next' ? 7 : -7));
+    setCurrentWeekStart(newDate);
+  };
+
+  const weekDays = getWeekDays();
+
+  return (
+    <SafeAreaView style={[styles.container, { paddingTop: safeAreaInsets.top }]}>
+      {statusBar}
+      <View style={styles.ordersHeader}>
+        <Pressable onPress={onBack} style={styles.backButton}>
+          <Text style={styles.backButtonText}>← חזרה</Text>
+        </Pressable>
+        <Text style={styles.ordersPageTitle}>סידורי ניקיון</Text>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <View style={styles.scheduleContainer}>
+          {/* Week Navigation */}
+          <View style={styles.weekNavigation}>
+            <Pressable onPress={() => navigateWeek('prev')} style={styles.weekNavButton}>
+              <Text style={styles.weekNavButtonText}>← שבוע קודם</Text>
+            </Pressable>
+            <Text style={styles.weekTitle}>
+              {formatDateShort(weekDays[0])} - {formatDateShort(weekDays[6])}
+            </Text>
+            <Pressable onPress={() => navigateWeek('next')} style={styles.weekNavButton}>
+              <Text style={styles.weekNavButtonText}>שבוע הבא →</Text>
+            </Pressable>
+          </View>
+
+          {/* Schedule Grid */}
+          <View style={styles.scheduleGrid}>
+            {weekDays.map((day, index) => {
+              const dayEntries = getEntriesForDate(day);
+              const isToday = day.toDateString() === new Date().toDateString();
+              
+              return (
+                <View key={index} style={styles.scheduleDay}>
+                  <View style={[styles.scheduleDayHeader, isToday && styles.scheduleDayHeaderToday]}>
+                    <Text style={[styles.scheduleDayName, isToday && styles.scheduleDayNameToday]}>
+                      {formatDate(day)}
+                    </Text>
+                    <Text style={[styles.scheduleDayDate, isToday && styles.scheduleDayDateToday]}>
+                      {formatDateShort(day)}
+                    </Text>
+                  </View>
+                  <ScrollView style={styles.scheduleDayContent}>
+                    {dayEntries.length === 0 ? (
+                      <Text style={styles.scheduleEmptyText}>אין תורים</Text>
+                    ) : (
+                      dayEntries.map((entry) => (
+                        <Pressable
+                          key={entry.id}
+                          style={styles.scheduleEntry}
+                          onPress={() => handleEditEntry(entry)}
+                          onLongPress={() => handleDeleteEntry(entry.id)}
+                        >
+                          <Text style={styles.scheduleEntryTime}>
+                            {entry.start_time} - {entry.end_time}
+                          </Text>
+                          <Text style={styles.scheduleEntryCleaner}>{entry.cleaner_name}</Text>
+                        </Pressable>
+                      ))
+                    )}
+                  </ScrollView>
+                  <Pressable
+                    style={styles.addEntryButton}
+                    onPress={() => {
+                      setSelectedDate(day.toISOString().split('T')[0]);
+                      setEditingEntry(null);
+                      setStartTime('');
+                      setEndTime('');
+                      setCleanerName('');
+                      setShowAddModal(true);
+                    }}
+                  >
+                    <Text style={styles.addEntryButtonText}>+ הוסף</Text>
+                  </Pressable>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      </ScrollView>
+
+      {/* Add/Edit Modal */}
+      <Modal
+        visible={showAddModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => {
+          setShowAddModal(false);
+          setEditingEntry(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              {editingEntry ? 'ערוך רשומה' : 'הוסף רשומה חדשה'}
+            </Text>
+
+            {/* Only show date field when editing, not when adding (date is already selected) */}
+            {editingEntry && (
+              <View style={styles.field}>
+                <Text style={styles.label}>תאריך *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={selectedDate}
+                  onChangeText={setSelectedDate}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor="#94a3b8"
+                />
+              </View>
+            )}
+
+            {!editingEntry && selectedDate && (
+              <View style={styles.field}>
+                <Text style={styles.label}>תאריך נבחר</Text>
+                <Text style={[styles.input, { color: '#3b82f6', fontWeight: '600', paddingVertical: 12 }]}>
+                  {selectedDate}
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.field}>
+              <Text style={styles.label}>שעת התחלה *</Text>
+              <TextInput
+                style={styles.input}
+                value={startTime}
+                onChangeText={setStartTime}
+                placeholder="HH:MM (לדוגמה: 09:00)"
+                placeholderTextColor="#94a3b8"
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>שעת סיום *</Text>
+              <TextInput
+                style={styles.input}
+                value={endTime}
+                onChangeText={setEndTime}
+                placeholder="HH:MM (לדוגמה: 12:00)"
+                placeholderTextColor="#94a3b8"
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>שם מנקה *</Text>
+              <TextInput
+                style={styles.input}
+                value={cleanerName}
+                onChangeText={setCleanerName}
+                placeholder="הזן שם מנקה"
+                placeholderTextColor="#94a3b8"
+              />
+            </View>
+
+            <View style={styles.modalButtons}>
+              <Pressable
+                onPress={handleSaveEntry}
+                style={[styles.modalButton, styles.formButtonPrimary]}
+              >
+                <Text style={styles.formButtonPrimaryText}>שמור</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setShowAddModal(false);
+                  setEditingEntry(null);
+                  setSelectedDate('');
+                  setStartTime('');
+                  setEndTime('');
+                  setCleanerName('');
+                }}
+                style={[styles.modalButton, styles.formButtonSecondary]}
+              >
+                <Text style={styles.formButtonSecondaryText}>ביטול</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+type InvoicesScreenProps = {
+  onBack: () => void;
+  safeAreaInsets: { top: number };
+  statusBar: React.ReactElement;
+};
+
+type InvoiceItem = {
+  name: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+};
+
+type ExtractedInvoiceData = {
+  total_price: number | null;
+  currency: string;
+  items: InvoiceItem[];
+  vendor?: string | null;
+  date?: string | null;
+  invoice_number?: string | null;
+};
+
+type SavedInvoice = {
+  id: string;
+  image_data: string;
+  total_price: number | null;
+  currency: string;
+  vendor: string | null;
+  date: string | null;
+  invoice_number: string | null;
+  extracted_data: ExtractedInvoiceData | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type EditInvoiceModalProps = {
+  invoice: SavedInvoice;
+  onSave: (invoice: SavedInvoice) => void;
+  onCancel: () => void;
+  formatMoney: (amount: number | null | undefined, currency?: string) => string;
+};
+
+function EditInvoiceModal({
+  invoice,
+  onSave,
+  onCancel,
+  formatMoney,
+}: EditInvoiceModalProps) {
+  const [editedInvoice, setEditedInvoice] = useState<SavedInvoice>({ ...invoice });
+  const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
+  const [newItem, setNewItem] = useState<InvoiceItem>({
+    name: '',
+    quantity: 1,
+    unit_price: 0,
+    total_price: 0,
+  });
+
+  const data = editedInvoice.extracted_data || {
+    total_price: editedInvoice.total_price,
+    currency: editedInvoice.currency || 'ILS',
+    items: [],
+    vendor: editedInvoice.vendor,
+    date: editedInvoice.date,
+    invoice_number: editedInvoice.invoice_number,
+  };
+
+  const updateData = (updates: Partial<ExtractedInvoiceData>) => {
+    const newData = { ...data, ...updates };
+    setEditedInvoice({
+      ...editedInvoice,
+      extracted_data: newData,
+      total_price: newData.total_price,
+      currency: newData.currency,
+      vendor: newData.vendor || null,
+      date: newData.date || null,
+      invoice_number: newData.invoice_number || null,
+    });
+  };
+
+  const handleAddItem = () => {
+    if (!newItem.name.trim()) {
+      Alert.alert('שגיאה', 'יש להזין שם פריט');
+      return;
+    }
+    const items = [...(data.items || []), { ...newItem }];
+    updateData({ items });
+    setNewItem({ name: '', quantity: 1, unit_price: 0, total_price: 0 });
+  };
+
+  const handleUpdateItem = (index: number, updates: Partial<InvoiceItem>) => {
+    const items = [...(data.items || [])];
+    items[index] = { ...items[index], ...updates };
+    if (updates.quantity !== undefined || updates.unit_price !== undefined) {
+      items[index].total_price = (items[index].quantity || 0) * (items[index].unit_price || 0);
+    }
+    updateData({ items });
+    setEditingItemIndex(null);
+  };
+
+  const handleRemoveItem = (index: number) => {
+    const items = [...(data.items || [])];
+    items.splice(index, 1);
+    updateData({ items });
+  };
+
+  const handleSave = () => {
+    // Recalculate total if items exist
+    if (data.items && data.items.length > 0) {
+      const calculatedTotal = data.items.reduce((sum, item) => sum + (item.total_price || 0), 0);
+      updateData({ total_price: calculatedTotal });
+    }
+    onSave(editedInvoice);
+  };
+
+  return (
+    <Modal visible={true} transparent animationType="slide" onRequestClose={onCancel}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalCard}>
+          <Text style={styles.modalTitle}>עריכת חשבונית</Text>
+          
+          <ScrollView style={styles.editInvoiceScroll}>
+            <View style={styles.field}>
+              <Text style={styles.label}>ספק</Text>
+              <TextInput
+                style={styles.input}
+                value={data.vendor || ''}
+                onChangeText={(text) => updateData({ vendor: text || null })}
+                placeholder="הזן שם ספק"
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>תאריך</Text>
+              <TextInput
+                style={styles.input}
+                value={data.date || ''}
+                onChangeText={(text) => updateData({ date: text || null })}
+                placeholder="YYYY-MM-DD"
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>מספר חשבונית</Text>
+              <TextInput
+                style={styles.input}
+                value={data.invoice_number || ''}
+                onChangeText={(text) => updateData({ invoice_number: text || null })}
+                placeholder="הזן מספר חשבונית"
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>מטבע</Text>
+              <TextInput
+                style={styles.input}
+                value={data.currency || 'ILS'}
+                onChangeText={(text) => updateData({ currency: text || 'ILS' })}
+                placeholder="ILS"
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>סכום כולל</Text>
+              <TextInput
+                style={styles.input}
+                value={data.total_price?.toString() || ''}
+                onChangeText={(text) => {
+                  const num = parseFloat(text) || null;
+                  updateData({ total_price: num });
+                }}
+                keyboardType="numeric"
+                placeholder="0.00"
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>פריטים</Text>
+              
+              {(data.items || []).map((item, index) => (
+                <View key={index} style={styles.editItemRow}>
+                  {editingItemIndex === index ? (
+                    <>
+                      <TextInput
+                        style={[styles.input, { flex: 1, marginBottom: 8 }]}
+                        value={item.name}
+                        onChangeText={(text) => handleUpdateItem(index, { name: text })}
+                        placeholder="שם פריט"
+                      />
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <TextInput
+                          style={[styles.input, { flex: 1 }]}
+                          value={item.quantity.toString()}
+                          onChangeText={(text) => {
+                            const qty = parseFloat(text) || 0;
+                            handleUpdateItem(index, { quantity: qty });
+                          }}
+                          keyboardType="numeric"
+                          placeholder="כמות"
+                        />
+                        <TextInput
+                          style={[styles.input, { flex: 1 }]}
+                          value={item.unit_price.toString()}
+                          onChangeText={(text) => {
+                            const price = parseFloat(text) || 0;
+                            handleUpdateItem(index, { unit_price: price });
+                          }}
+                          keyboardType="numeric"
+                          placeholder="מחיר יחידה"
+                        />
+                      </View>
+                      <Pressable
+                        onPress={() => setEditingItemIndex(null)}
+                        style={styles.saveItemButton}
+                      >
+                        <Text style={styles.saveItemButtonText}>שמור</Text>
+                      </Pressable>
+                    </>
+                  ) : (
+                    <>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.itemName}>{item.name}</Text>
+                        <Text style={styles.itemQuantity}>
+                          {item.quantity} × {formatMoney(item.unit_price, data.currency)} = {formatMoney(item.total_price, data.currency)}
+                        </Text>
+                      </View>
+                      <Pressable
+                        onPress={() => setEditingItemIndex(index)}
+                        style={styles.editItemButton}
+                      >
+                        <Text style={styles.editItemButtonText}>ערוך</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => handleRemoveItem(index)}
+                        style={styles.removeItemButton}
+                      >
+                        <Text style={styles.removeItemButtonText}>מחק</Text>
+                      </Pressable>
+                    </>
+                  )}
+                </View>
+              ))}
+
+              <View style={styles.addItemSection}>
+                <Text style={styles.label}>הוסף פריט חדש</Text>
+                <TextInput
+                  style={styles.input}
+                  value={newItem.name}
+                  onChangeText={(text) => setNewItem({ ...newItem, name: text })}
+                  placeholder="שם פריט"
+                />
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                  <TextInput
+                    style={[styles.input, { flex: 1 }]}
+                    value={newItem.quantity.toString()}
+                    onChangeText={(text) => {
+                      const qty = parseFloat(text) || 0;
+                      setNewItem({ ...newItem, quantity: qty, total_price: qty * newItem.unit_price });
+                    }}
+                    keyboardType="numeric"
+                    placeholder="כמות"
+                  />
+                  <TextInput
+                    style={[styles.input, { flex: 1 }]}
+                    value={newItem.unit_price.toString()}
+                    onChangeText={(text) => {
+                      const price = parseFloat(text) || 0;
+                      setNewItem({ ...newItem, unit_price: price, total_price: newItem.quantity * price });
+                    }}
+                    keyboardType="numeric"
+                    placeholder="מחיר יחידה"
+                  />
+                </View>
+                <Pressable onPress={handleAddItem} style={styles.addItemButton}>
+                  <Text style={styles.addItemButtonText}>+ הוסף פריט</Text>
+                </Pressable>
+              </View>
+            </View>
+          </ScrollView>
+
+          <View style={styles.modalButtons}>
+            <Pressable onPress={handleSave} style={[styles.modalButton, styles.modalButtonPrimary]}>
+              <Text style={styles.modalButtonText}>שמור</Text>
+            </Pressable>
+            <Pressable onPress={onCancel} style={[styles.modalButton, styles.modalButtonGhost]}>
+              <Text style={styles.modalButtonGhostText}>ביטול</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function InvoicesScreen({
+  onBack,
+  safeAreaInsets,
+  statusBar,
+}: InvoicesScreenProps) {
+  const [invoices, setInvoices] = useState<SavedInvoice[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [processing, setProcessing] = useState(false);
+  const [editingInvoice, setEditingInvoice] = useState<SavedInvoice | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+
+  useEffect(() => {
+    loadInvoices();
+  }, []);
+
+  const loadInvoices = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE_URL}/api/invoices`);
+      if (response.ok) {
+        const data = await response.json();
+        // Parse extracted_data if it's a string
+        const parsedInvoices = (data || []).map((inv: any) => {
+          let extractedData = inv.extracted_data;
+          if (typeof extractedData === 'string') {
+            try {
+              extractedData = JSON.parse(extractedData);
+            } catch {
+              extractedData = null;
+            }
+          }
+          return {
+            ...inv,
+            extracted_data: extractedData,
+          };
+        });
+        setInvoices(parsedInvoices);
+        console.log(`Loaded ${parsedInvoices.length} invoices`);
+      } else {
+        console.error('Failed to load invoices:', response.status, await response.text().catch(() => ''));
+      }
+    } catch (err) {
+      console.error('Error loading invoices:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePickImage = async () => {
+    try {
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        selectionLimit: 1,
+        includeBase64: true,
+      });
+      if (result.didCancel) return;
+      
+      const asset = result.assets?.[0];
+      const base64 = asset?.base64;
+      const mime = asset?.type || 'image/jpeg';
+      if (!base64) {
+        Alert.alert('שגיאה', 'לא ניתן לקרוא את התמונה שנבחרה');
+        return;
+      }
+      const dataUri = `data:${mime};base64,${base64}`;
+      setSelectedImage(dataUri);
+    } catch (err: any) {
+      Alert.alert('שגיאה', err?.message || 'לא ניתן לבחור תמונה');
+    }
+  };
+
+  const handleProcessInvoice = async () => {
+    if (!selectedImage) {
+      Alert.alert('שגיאה', 'יש לבחור תמונה תחילה');
+      return;
+    }
+
+    setProcessing(true);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/invoices/process`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ image: selectedImage }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(errorText || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      // Check if invoice was saved
+      if (data.saved && data.id) {
+        setSelectedImage(null);
+        await loadInvoices();
+        Alert.alert('הצלחה', 'החשבונית נשמרה בהצלחה');
+      } else {
+        // Invoice processed but not saved - might be table issue
+        console.warn('Invoice processed but not saved to database:', data);
+        Alert.alert(
+          'אזהרה', 
+          'החשבונית עובדה אך לא נשמרה במסד הנתונים. ודא שהטבלה קיימת ב-Supabase.'
+        );
+        setSelectedImage(null);
+        await loadInvoices(); // Still try to reload in case it was saved
+      }
+    } catch (err: any) {
+      const errorMessage = err.message || 'שגיאה בעיבוד החשבונית';
+      Alert.alert('שגיאה', errorMessage);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleEditInvoice = (invoice: SavedInvoice) => {
+    setEditingInvoice(invoice);
+    setShowEditModal(true);
+  };
+
+  const handleSaveInvoice = async (updatedInvoice: SavedInvoice) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/invoices/${updatedInvoice.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          total_price: updatedInvoice.total_price,
+          currency: updatedInvoice.currency,
+          vendor: updatedInvoice.vendor,
+          date: updatedInvoice.date,
+          invoice_number: updatedInvoice.invoice_number,
+          extracted_data: updatedInvoice.extracted_data,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('לא ניתן לשמור את החשבונית');
+      }
+
+      setShowEditModal(false);
+      setEditingInvoice(null);
+      await loadInvoices();
+      Alert.alert('הצלחה', 'החשבונית עודכנה בהצלחה');
+    } catch (err: any) {
+      Alert.alert('שגיאה', err.message || 'לא ניתן לשמור את החשבונית');
+    }
+  };
+
+  const handleDeleteInvoice = async (id: string) => {
+    Alert.alert(
+      'מחיקת חשבונית',
+      'האם אתה בטוח שברצונך למחוק את החשבונית?',
+      [
+        { text: 'ביטול', style: 'cancel' },
+        {
+          text: 'מחק',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const response = await fetch(`${API_BASE_URL}/api/invoices/${id}`, {
+                method: 'DELETE',
+              });
+              if (response.ok) {
+                await loadInvoices();
+                Alert.alert('הצלחה', 'החשבונית נמחקה בהצלחה');
+              }
+            } catch (err) {
+              Alert.alert('שגיאה', 'לא ניתן למחוק את החשבונית');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const formatMoney = (amount: number | null | undefined, currency: string = 'ILS') => {
+    if (amount === null || amount === undefined) {
+      return '₪0.00';
+    }
+    const symbol = currency === 'ILS' ? '₪' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency;
+    return `${symbol}${amount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return '—';
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('he-IL');
+    } catch {
+      return dateString;
+    }
+  };
+
+  return (
+    <SafeAreaView style={[styles.container, { paddingTop: safeAreaInsets.top }]}>
+      {statusBar}
+      <View style={styles.ordersHeader}>
+        <Pressable onPress={onBack} style={styles.backButton}>
+          <Text style={styles.backButtonText}>← חזרה</Text>
+        </Pressable>
+        <Text style={styles.ordersPageTitle}>חשבוניות</Text>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scroll}>
+        {/* Upload Section */}
+        <View style={styles.invoiceContainer}>
+          <Text style={styles.invoiceTitle}>העלאת חשבונית</Text>
+          <Text style={styles.invoiceSubtitle}>
+            העלה תמונה של חשבונית והמערכת תזהה את הסכום הכולל ומחירי הפריטים
+          </Text>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>תמונת חשבונית</Text>
+            {selectedImage ? (
+              <View style={styles.imagePreviewContainer}>
+                <ImageBackground
+                  source={{ uri: selectedImage }}
+                  style={styles.imagePreview}
+                  resizeMode="contain"
+                >
+                  <View style={styles.imagePreviewOverlay}>
+                    <Pressable
+                      onPress={handlePickImage}
+                      style={styles.changeImageButton}
+                    >
+                      <Text style={styles.changeImageButtonText}>החלף תמונה</Text>
+                    </Pressable>
+                  </View>
+                </ImageBackground>
+              </View>
+            ) : (
+              <Pressable
+                onPress={handlePickImage}
+                style={styles.uploadImageButton}
+              >
+                <Text style={styles.uploadImageButtonText}>+ העלה תמונה</Text>
+              </Pressable>
+            )}
+          </View>
+
+          {selectedImage && (
+            <Pressable
+              onPress={handleProcessInvoice}
+              disabled={processing}
+              style={[
+                styles.processButton,
+                processing && styles.processButtonDisabled,
+              ]}
+            >
+              <Text style={styles.processButtonText}>
+                {processing ? 'מעבד...' : 'עבד חשבונית'}
+              </Text>
+            </Pressable>
+          )}
+        </View>
+
+        {/* Invoices List */}
+        <View style={styles.invoiceContainer}>
+          <Text style={styles.invoiceTitle}>חשבוניות שמורות ({invoices.length})</Text>
+          
+          {loading ? (
+            <Text style={styles.loadingText}>טוען...</Text>
+          ) : invoices.length === 0 ? (
+            <Text style={styles.emptyText}>אין חשבוניות שמורות</Text>
+          ) : (
+            <View style={styles.invoicesList}>
+              {invoices.map((invoice) => {
+                const data = invoice.extracted_data || {
+                  total_price: invoice.total_price,
+                  currency: invoice.currency || 'ILS',
+                  items: [],
+                  vendor: invoice.vendor,
+                  date: invoice.date,
+                  invoice_number: invoice.invoice_number,
+                };
+                
+                return (
+                  <Pressable
+                    key={invoice.id}
+                    onPress={() => handleEditInvoice(invoice)}
+                    style={styles.invoiceCard}
+                  >
+                    <Image
+                      source={{ uri: invoice.image_data }}
+                      style={styles.invoiceThumbnail}
+                    />
+                    <View style={styles.invoiceCardContent}>
+                      <Text style={styles.invoiceCardVendor}>
+                        {data.vendor || 'ללא ספק'}
+                      </Text>
+                      <Text style={styles.invoiceCardDate}>
+                        {formatDate(data.date || invoice.created_at)}
+                      </Text>
+                      <Text style={styles.invoiceCardTotal}>
+                        {formatMoney(data.total_price, data.currency)}
+                      </Text>
+                      {data.invoice_number && (
+                        <Text style={styles.invoiceCardNumber}>
+                          #{data.invoice_number}
+                        </Text>
+                      )}
+                    </View>
+                    <Pressable
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleDeleteInvoice(invoice.id);
+                      }}
+                      style={styles.deleteInvoiceButton}
+                    >
+                      <Text style={styles.deleteInvoiceButtonText}>מחק</Text>
+                    </Pressable>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+        </View>
+      </ScrollView>
+
+      {/* Edit Invoice Modal */}
+      {showEditModal && editingInvoice && (
+        <EditInvoiceModal
+          invoice={editingInvoice}
+          onSave={handleSaveInvoice}
+          onCancel={() => {
+            setShowEditModal(false);
+            setEditingInvoice(null);
+          }}
+          formatMoney={formatMoney}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -6486,6 +8007,21 @@ const styles = StyleSheet.create({
   ctaOutline: {
     flex: 1,
     borderColor: 'rgba(255,255,255,0.65)',
+  },
+  testNotificationButton: {
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(56, 189, 248, 0.2)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.4)',
+    alignItems: 'center',
+  },
+  testNotificationButtonText: {
+    color: '#e0f2fe',
+    fontSize: 14,
+    fontWeight: '600',
   },
   optionGrid: {
     flexDirection: 'row-reverse',
@@ -8087,6 +9623,40 @@ const styles = StyleSheet.create({
     color: '#64748b',
     textAlign: 'right',
   },
+  editMediaButton: {
+    backgroundColor: '#3b82f6',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  editMediaButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  removeMediaButton: {
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  removeMediaButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  addMediaButton: {
+    backgroundColor: '#3b82f6',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  addMediaButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   taskDetailCard: {
     backgroundColor: '#fff',
     borderRadius: 16,
@@ -8143,18 +9713,29 @@ const styles = StyleSheet.create({
   },
   taskImageContainer: {
     marginTop: 8,
-  },
-  taskImageThumbnail: {
-    width: '100%',
-    height: 150,
     borderRadius: 12,
+    overflow: 'hidden',
     backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
-  taskImageFull: {
+  taskDetailImage: {
     width: '100%',
     height: 300,
-    borderRadius: 12,
+  },
+  taskImagePreviewContainer: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    overflow: 'hidden',
     backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginBottom: 8,
+  },
+  taskImagePreview: {
+    width: '100%',
+    height: '100%',
   },
   taskImagePlaceholder: {
     backgroundColor: '#f8fafc',
@@ -8172,28 +9753,51 @@ const styles = StyleSheet.create({
   },
   changeImageButton: {
     backgroundColor: '#f1f5f9',
-    paddingVertical: 10,
+    paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 8,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 36,
+    maxHeight: 40,
   },
   changeImageButtonText: {
     color: '#475569',
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: 13,
   },
   uploadImageButton: {
     backgroundColor: '#22c55e',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
     alignItems: 'center',
-    marginTop: 8,
+    justifyContent: 'center',
+    marginTop: 0,
+    minHeight: 36,
+    maxHeight: 40,
   },
   uploadImageButtonText: {
     color: '#fff',
     fontWeight: '700',
-    fontSize: 15,
+    fontSize: 13,
+  },
+  closeModalButtonsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  closeModalGridButton: {
+    flex: 1,
+    minWidth: '48%',
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 36,
+    maxHeight: 40,
   },
   taskActions: {
     marginTop: 24,
@@ -8203,9 +9807,46 @@ const styles = StyleSheet.create({
   },
   closeTaskButton: {
     backgroundColor: '#22c55e',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 36,
+    maxHeight: 40,
+  },
+  closeTaskButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  taskClosedIndicator: {
+    marginTop: 12,
+    backgroundColor: '#dbeafe',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+  },
+  taskClosedIndicatorText: {
+    color: '#3b82f6',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  taskClosedButton: {
+    backgroundColor: '#dbeafe',
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+  },
+  taskClosedButtonText: {
+    color: '#3b82f6',
+    fontSize: 16,
+    fontWeight: '700',
   },
   closeTaskButtonText: {
     color: '#fff',
@@ -8284,6 +9925,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    maxHeight: '80%',
+  },
   modalCard: {
     width: '100%',
     backgroundColor: '#fff',
@@ -8307,6 +9956,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
+  },
+  modalButtonPrimary: {
+    backgroundColor: '#22c55e',
   },
   modalButtonText: {
     color: '#fff',
@@ -8540,6 +10192,85 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#fff',
+  },
+  attendanceHistorySection: {
+    marginTop: 24,
+    paddingTop: 20,
+    borderTopWidth: 2,
+    borderTopColor: '#f1f5f9',
+  },
+  attendanceHistoryTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0f172a',
+    textAlign: 'right',
+    marginBottom: 16,
+  },
+  attendanceHistoryList: {
+    gap: 12,
+  },
+  attendanceHistoryItem: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  attendanceHistoryItemHeader: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  attendanceHistoryItemDate: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  attendanceActiveBadge: {
+    backgroundColor: '#22c55e',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  attendanceActiveBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  attendanceHistoryItemDetails: {
+    gap: 8,
+  },
+  attendanceHistoryDetailRow: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  attendanceHistoryDetailLabel: {
+    fontSize: 14,
+    color: '#64748b',
+  },
+  attendanceHistoryDetailValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0f172a',
+  },
+  attendanceHistoryDuration: {
+    color: '#3b82f6',
+    fontSize: 16,
+  },
+  attendanceEmptyState: {
+    padding: 24,
+    alignItems: 'center',
+  },
+  attendanceEmptyStateText: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
   },
   // Warehouse Menu Styles
   warehouseMenuOptions: {
@@ -8788,6 +10519,932 @@ const styles = StyleSheet.create({
     color: '#64748b',
     fontSize: 18,
     fontWeight: '600',
+  },
+  // Invoice Styles
+  invoiceContainer: {
+    padding: 20,
+    gap: 20,
+  },
+  invoiceTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#0f172a',
+    textAlign: 'right',
+  },
+  invoiceSubtitle: {
+    fontSize: 16,
+    color: '#64748b',
+    textAlign: 'right',
+    lineHeight: 24,
+  },
+  imagePreviewContainer: {
+    marginTop: 12,
+  },
+  imagePreview: {
+    width: '100%',
+    height: 300,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#f1f5f9',
+  },
+  imagePreviewOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  processButton: {
+    backgroundColor: '#3b82f6',
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  processButtonDisabled: {
+    backgroundColor: '#94a3b8',
+    opacity: 0.6,
+  },
+  processButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  errorContainer: {
+    backgroundColor: '#fee2e2',
+    borderColor: '#fca5a5',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 16,
+  },
+  errorText: {
+    color: '#dc2626',
+    fontSize: 14,
+    textAlign: 'right',
+  },
+  extractedDataContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    marginTop: 20,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  extractedDataTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#0f172a',
+    textAlign: 'right',
+    marginBottom: 16,
+  },
+  extractedDataRow: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  extractedDataLabel: {
+    fontSize: 14,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  extractedDataValue: {
+    fontSize: 16,
+    color: '#0f172a',
+    fontWeight: '600',
+  },
+  extractedDataSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  extractedDataSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0f172a',
+    textAlign: 'right',
+    marginBottom: 12,
+  },
+  itemsList: {
+    gap: 12,
+  },
+  itemRow: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  itemDetails: {
+    flex: 1,
+    gap: 4,
+  },
+  itemName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0f172a',
+    textAlign: 'right',
+  },
+  itemQuantity: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'right',
+  },
+  itemTotalPrice: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#3b82f6',
+  },
+  noItemsText: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'right',
+    fontStyle: 'italic',
+  },
+  selectedImagesContainer: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 16,
+  },
+  selectedImageItem: {
+    position: 'relative',
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#3b82f6',
+  },
+  selectedImageThumb: {
+    width: '100%',
+    height: '100%',
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    backgroundColor: '#ef4444',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  removeImageButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  invoicesList: {
+    gap: 12,
+    marginTop: 16,
+  },
+  invoiceCard: {
+    flexDirection: 'row-reverse',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  invoiceThumbnail: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    marginLeft: 12,
+  },
+  invoiceCardContent: {
+    flex: 1,
+    gap: 4,
+  },
+  invoiceCardVendor: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0f172a',
+    textAlign: 'right',
+  },
+  invoiceCardDate: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'right',
+  },
+  invoiceCardTotal: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#3b82f6',
+    textAlign: 'right',
+  },
+  invoiceCardNumber: {
+    fontSize: 12,
+    color: '#94a3b8',
+    textAlign: 'right',
+  },
+  deleteInvoiceButton: {
+    backgroundColor: '#fee2e2',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    justifyContent: 'center',
+  },
+  deleteInvoiceButtonText: {
+    color: '#dc2626',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#64748b',
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#94a3b8',
+    textAlign: 'center',
+    paddingVertical: 20,
+    fontStyle: 'italic',
+  },
+  editInvoiceScroll: {
+    maxHeight: 500,
+  },
+  editItemRow: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  editItemButton: {
+    backgroundColor: '#3b82f6',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginTop: 8,
+  },
+  editItemButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  removeItemButton: {
+    backgroundColor: '#fee2e2',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginTop: 8,
+    marginRight: 8,
+  },
+  removeItemButtonText: {
+    color: '#dc2626',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  saveItemButton: {
+    backgroundColor: '#10b981',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginTop: 8,
+  },
+  saveItemButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  addItemSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  addItemButton: {
+    backgroundColor: '#10b981',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  addItemButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  totalPriceContainer: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 2,
+    borderTopColor: '#3b82f6',
+  },
+  totalPriceLabel: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  totalPriceValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#3b82f6',
+  },
+  // Cleaning Schedule Styles
+  scheduleContainer: {
+    padding: 20,
+    gap: 20,
+  },
+  weekNavigation: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  weekNavButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+  },
+  weekNavButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3b82f6',
+  },
+  weekTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  scheduleGrid: {
+    gap: 12,
+  },
+  scheduleDay: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    overflow: 'hidden',
+  },
+  scheduleDayHeader: {
+    backgroundColor: '#f8fafc',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  scheduleDayHeaderToday: {
+    backgroundColor: '#dbeafe',
+    borderBottomColor: '#3b82f6',
+  },
+  scheduleDayName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0f172a',
+    textAlign: 'right',
+  },
+  scheduleDayNameToday: {
+    color: '#3b82f6',
+  },
+  scheduleDayDate: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'right',
+    marginTop: 4,
+  },
+  scheduleDayDateToday: {
+    color: '#3b82f6',
+    fontWeight: '600',
+  },
+  scheduleDayContent: {
+    maxHeight: 200,
+    padding: 8,
+  },
+  scheduleEmptyText: {
+    fontSize: 14,
+    color: '#94a3b8',
+    textAlign: 'center',
+    paddingVertical: 16,
+    fontStyle: 'italic',
+  },
+  scheduleEntry: {
+    backgroundColor: '#f1f5f9',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  scheduleEntryTime: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0f172a',
+    textAlign: 'right',
+    marginBottom: 4,
+  },
+  scheduleEntryCleaner: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3b82f6',
+    textAlign: 'right',
+  },
+  addEntryButton: {
+    backgroundColor: '#10b981',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  addEntryButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  // New Inventory Order Styles
+  orderSearchSection: {
+    marginBottom: 20,
+  },
+  searchContainer: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#0f172a',
+  },
+  searchIcon: {
+    fontSize: 18,
+    marginLeft: 12,
+  },
+  selectedItemsCard: {
+    backgroundColor: '#f0f9ff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: '#bae6fd',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  selectedItemsHeader: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  selectedItemsTotal: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3b82f6',
+  },
+  selectedItemsList: {
+    maxHeight: 200,
+  },
+  selectedItemCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  selectedItemInfo: {
+    flex: 1,
+  },
+  selectedItemName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0f172a',
+    textAlign: 'right',
+  },
+  selectedItemCategory: {
+    fontSize: 12,
+    color: '#64748b',
+    textAlign: 'right',
+    marginTop: 2,
+  },
+  selectedItemControls: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
+  quantityButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  quantityButtonText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  quantityInputSelected: {
+    width: 50,
+    height: 32,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0f172a',
+  },
+  selectedItemUnit: {
+    fontSize: 12,
+    color: '#64748b',
+    marginRight: 4,
+  },
+  removeItemButtonNew: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#fee2e2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  removeItemButtonTextNew: {
+    color: '#dc2626',
+    fontSize: 20,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  itemsListSection: {
+    marginBottom: 24,
+  },
+  itemCardNew: {
+    width: '48%',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  itemCardSelected: {
+    borderColor: '#a78bfa',
+    borderWidth: 2,
+    backgroundColor: '#faf5ff',
+  },
+  itemCardHeader: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  itemCardName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0f172a',
+    flex: 1,
+    textAlign: 'right',
+  },
+  itemCardBadge: {
+    backgroundColor: '#f1f5f9',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  itemCardBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  itemCardInfo: {
+    marginBottom: 10,
+  },
+  itemCardStock: {
+    fontSize: 12,
+    color: '#475569',
+    textAlign: 'right',
+    marginBottom: 2,
+  },
+  itemCardMinStock: {
+    fontSize: 11,
+    color: '#f59e0b',
+    textAlign: 'right',
+  },
+  itemCardSelectedIndicator: {
+    backgroundColor: '#ede9fe',
+    borderRadius: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    marginBottom: 8,
+  },
+  itemCardSelectedText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#7c3aed',
+    textAlign: 'right',
+  },
+  itemQuantitySelector: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
+  quantityInputContainer: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    backgroundColor: '#fff',
+  },
+  quantityInputSmall: {
+    flex: 1,
+    paddingVertical: 6,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0f172a',
+    textAlign: 'center',
+  },
+  quantityUnitText: {
+    fontSize: 11,
+    color: '#64748b',
+    marginLeft: 4,
+  },
+  addItemButton: {
+    backgroundColor: '#a78bfa',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  addItemButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  emptyStateNew: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  emptyStateTextNew: {
+    fontSize: 15,
+    color: '#94a3b8',
+    textAlign: 'center',
+  },
+  orderDetailsCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  saveOrderButtonDisabled: {
+    backgroundColor: '#cbd5e1',
+    opacity: 0.6,
+  },
+  modalOption: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  modalOptionSelected: {
+    backgroundColor: '#ede9fe',
+    borderColor: '#a78bfa',
+    borderWidth: 2,
+  },
+  modalOptionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#475569',
+    textAlign: 'right',
+  },
+  modalOptionTextSelected: {
+    color: '#7c3aed',
+  },
+  modalCancelButton: {
+    marginTop: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 12,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  modalCancelButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  // Simple Order List Styles
+  simpleOrderList: {
+    marginBottom: 20,
+  },
+  simpleOrderItem: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 16,
+    marginBottom: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  simpleOrderItemInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  simpleOrderItemName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0f172a',
+    textAlign: 'right',
+    marginBottom: 4,
+  },
+  simpleOrderItemDetails: {
+    fontSize: 13,
+    color: '#64748b',
+    textAlign: 'right',
+  },
+  simpleOrderItemControls: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
+  simpleQuantityInput: {
+    width: 60,
+    height: 40,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0f172a',
+    textAlign: 'center',
+  },
+  simpleOrderUnit: {
+    fontSize: 13,
+    color: '#64748b',
+    minWidth: 30,
+    textAlign: 'right',
+  },
+  orderItemCount: {
+    fontSize: 14,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  orderItemRow: {
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    marginTop: 8,
+  },
+  orderCardActions: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  changeStatusButton: {
+    backgroundColor: '#3b82f6',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  changeStatusButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  statusChangeButtons: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 8,
+    flex: 1,
+  },
+  statusOptionButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  statusOptionButtonActive: {
+    backgroundColor: '#3b82f6',
+    borderColor: '#3b82f6',
+  },
+  statusOptionText: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  statusOptionTextActive: {
+    color: '#fff',
+  },
+  cancelStatusButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    backgroundColor: '#fee2e2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  cancelStatusButtonText: {
+    fontSize: 12,
+    color: '#dc2626',
+    fontWeight: '500',
+  },
+  productNameInput: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0f172a',
+    textAlign: 'right',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minHeight: 40,
+  },
+  addProductButton: {
+    backgroundColor: '#3b82f6',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#2563eb',
+  },
+  addProductButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  removeProductButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#fee2e2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  removeProductButtonText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#dc2626',
+    lineHeight: 20,
   },
 });
 
