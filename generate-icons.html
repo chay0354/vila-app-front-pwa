@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Icon Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            text-align: center;
+        }
+        canvas {
+            border: 1px solid #ccc;
+            margin: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #4a90e2;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        button:hover {
+            background: #357abd;
+        }
+    </style>
+</head>
+<body>
+    <h1>PWA Icon Generator</h1>
+    <p>Click the buttons below to generate and download the required icons.</p>
+    
+    <div>
+        <canvas id="icon192" width="192" height="192"></canvas>
+        <canvas id="icon512" width="512" height="512"></canvas>
+    </div>
+    
+    <div>
+        <button onclick="generateIcon(192)">Generate & Download 192x192</button>
+        <button onclick="generateIcon(512)">Generate & Download 512x512</button>
+    </div>
+
+    <script>
+        function generateIcon(size) {
+            const canvas = document.getElementById(`icon${size}`);
+            const ctx = canvas.getContext('2d');
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, size, size);
+            
+            // Draw background gradient
+            const gradient = ctx.createLinearGradient(0, 0, size, size);
+            gradient.addColorStop(0, '#667eea');
+            gradient.addColorStop(1, '#764ba2');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, size, size);
+            
+            // Draw notification bell icon
+            ctx.fillStyle = 'white';
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = size / 20;
+            
+            // Bell shape
+            const centerX = size / 2;
+            const centerY = size / 2;
+            const bellSize = size * 0.4;
+            
+            ctx.beginPath();
+            // Bell top
+            ctx.arc(centerX, centerY - bellSize * 0.3, bellSize * 0.15, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Bell body
+            ctx.beginPath();
+            ctx.moveTo(centerX - bellSize * 0.3, centerY - bellSize * 0.2);
+            ctx.quadraticCurveTo(centerX - bellSize * 0.3, centerY + bellSize * 0.3, centerX - bellSize * 0.15, centerY + bellSize * 0.4);
+            ctx.lineTo(centerX + bellSize * 0.15, centerY + bellSize * 0.4);
+            ctx.quadraticCurveTo(centerX + bellSize * 0.3, centerY + bellSize * 0.3, centerX + bellSize * 0.3, centerY - bellSize * 0.2);
+            ctx.quadraticCurveTo(centerX + bellSize * 0.3, centerY - bellSize * 0.4, centerX, centerY - bellSize * 0.4);
+            ctx.quadraticCurveTo(centerX - bellSize * 0.3, centerY - bellSize * 0.4, centerX - bellSize * 0.3, centerY - bellSize * 0.2);
+            ctx.fill();
+            
+            // Bell clapper
+            ctx.beginPath();
+            ctx.arc(centerX, centerY + bellSize * 0.45, bellSize * 0.08, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Download the icon
+            canvas.toBlob((blob) => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `icon-${size}.png`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 'image/png');
+        }
+        
+        // Auto-generate on load
+        window.onload = () => {
+            generateIcon(192);
+            setTimeout(() => generateIcon(512), 500);
+        };
+    </script>
+</body>
+</html>
+
