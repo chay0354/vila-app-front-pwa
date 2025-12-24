@@ -328,6 +328,7 @@ function AppContent() {
   const [reportsSummary, setReportsSummary] = useState<{totalRevenue: number; totalPaid: number; totalExpenses: number} | null>(null);
   const [reportsSummaryError, setReportsSummaryError] = useState<string | null>(null);
   const [maintenanceTasksReport, setMaintenanceTasksReport] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<Array<{id: string; total_price?: number | null; extracted_data?: any}>>([]);
   // Track previous state for notifications
   const [previousMaintenanceTasks, setPreviousMaintenanceTasks] = useState<any[]>([]);
   const [previousChatMessages, setPreviousChatMessages] = useState<Array<{id: number; sender: string; content: string; created_at: string}>>([]);
@@ -720,6 +721,22 @@ function AppContent() {
     }
   };
 
+  const loadInvoices = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/invoices`);
+      if (response.ok) {
+        const data = await response.json();
+        setInvoices(data || []);
+      } else {
+        console.error('Failed to load invoices:', response.status);
+        setInvoices([]);
+      }
+    } catch (err) {
+      console.error('Error loading invoices:', err);
+      setInvoices([]);
+    }
+  };
+
   const loadReportsSummary = async () => {
     try {
       setReportsSummaryError(null);
@@ -971,6 +988,7 @@ function AppContent() {
   useEffect(() => {
     if (screen === 'hub' || screen === 'orders') {
       loadOrders();
+      loadInvoices();
     }
     if (screen === 'exitInspections') {
       loadOrders();
@@ -1380,6 +1398,30 @@ function AppContent() {
     const activeOrders = orders.filter(o => o.status !== 'בוטל' && o.status !== 'שולם').length;
     const completedOrders = orders.filter(o => o.status === 'שולם').length;
     
+    // Calculate total expenses from invoices
+    const totalExpenses = invoices.reduce((sum, invoice) => {
+      // Try to get amount from extracted_data first (simplified schema)
+      let amount = 0;
+      const extractedData = invoice.extracted_data;
+      if (extractedData) {
+        if (typeof extractedData === 'string') {
+          try {
+            const parsed = JSON.parse(extractedData);
+            amount = parsed.total_price || 0;
+          } catch {
+            amount = 0;
+          }
+        } else if (typeof extractedData === 'object' && extractedData !== null) {
+          amount = extractedData.total_price || 0;
+        }
+      }
+      // Fallback to invoice-level total_price
+      if (!amount) {
+        amount = invoice.total_price || 0;
+      }
+      return sum + (typeof amount === 'number' ? amount : 0);
+    }, 0);
+    
     return (
       <SafeAreaView style={[styles.hubContainer, { paddingTop: safeAreaInsets.top }]}>
         {statusBar}
@@ -1407,7 +1449,7 @@ function AppContent() {
               <Text style={styles.statLabel}>הכנסות</Text>
             </View>
             <View style={[styles.statCard, { backgroundColor: '#fee2e2', borderColor: '#ef4444' }]}>
-              <Text style={styles.statValue}>₪0</Text>
+              <Text style={styles.statValue}>₪{totalExpenses.toLocaleString('he-IL')}</Text>
               <Text style={styles.statLabel}>הוצאות</Text>
             </View>
           </View>
@@ -4070,8 +4112,15 @@ function ReportsScreen({
   statusBar,
 }: ReportsScreenProps) {
   const [activeReport, setActiveReport] = useState<
-    'orders' | 'inspections' | 'warehouse' | 'maintenance' | 'attendance'
+    'orders' | 'inspections' | 'warehouse' | 'maintenance' | 'attendance' | 'income-expenses'
   >('orders');
+  const [monthlyIncomeExpenses, setMonthlyIncomeExpenses] = useState<{
+    monthly_data: Array<{month: string; income: number; expenses: number; net: number}>;
+    total_income: number;
+    total_expenses: number;
+    total_net: number;
+  } | null>(null);
+  const [loadingMonthlyReport, setLoadingMonthlyReport] = useState(false);
   const [reportView, setReportView] = useState<'list' | 'detail'>('list');
   const [showAllWarehouseStock, setShowAllWarehouseStock] = useState(false);
   const [showAllWarehouseOrders, setShowAllWarehouseOrders] = useState(false);
@@ -4773,11 +4822,35 @@ function ReportsScreen({
           ? 'דוח מחסן'
           : activeReport === 'maintenance'
             ? 'דוח תחזוקה'
-            : 'דוח נוכחות';
+            : activeReport === 'income-expenses'
+              ? 'דוח הוצאות והכנסות'
+              : 'דוח נוכחות';
+
+  const loadMonthlyIncomeExpenses = async () => {
+    try {
+      setLoadingMonthlyReport(true);
+      const response = await fetch(`${API_BASE_URL}/api/reports/monthly-income-expenses`);
+      if (response.ok) {
+        const data = await response.json();
+        setMonthlyIncomeExpenses(data);
+      } else {
+        console.error('Failed to load monthly income/expenses:', response.status);
+        setMonthlyIncomeExpenses(null);
+      }
+    } catch (err) {
+      console.error('Error loading monthly income/expenses:', err);
+      setMonthlyIncomeExpenses(null);
+    } finally {
+      setLoadingMonthlyReport(false);
+    }
+  };
 
   const openReport = (r: typeof activeReport) => {
     setActiveReport(r);
     setReportView('detail');
+    if (r === 'income-expenses') {
+      loadMonthlyIncomeExpenses();
+    }
   };
 
   return (
@@ -4916,6 +4989,18 @@ function ReportsScreen({
                 cta="פתח דוח מלא"
                 onPress={() => openReport('attendance')}
               />
+              <OptionCard
+                title="דוח הוצאות והכנסות"
+                icon="הו"
+                accent="#10b981"
+                details={[
+                  `סה״כ הכנסות: ${formatMoney(totalRevenue)}`,
+                  `סה״כ הוצאות: ${formatMoney(totalExpenses)}`,
+                  `יתרה: ${formatMoney(totalRevenue - totalExpenses)}`,
+                ]}
+                cta="פתח דוח מלא"
+                onPress={() => openReport('income-expenses')}
+              />
             </View>
           </View>
         ) : (
@@ -4932,7 +5017,9 @@ function ReportsScreen({
                         ? onOpenWarehouse
                         : activeReport === 'maintenance'
                           ? onOpenMaintenance
-                          : onOpenAttendance
+                          : activeReport === 'income-expenses'
+                            ? () => {}
+                            : onOpenAttendance
                 }
                 style={[styles.addOrderButton, { backgroundColor: '#0ea5e9' }]}
               >
@@ -5420,6 +5507,81 @@ function ReportsScreen({
                     </View>
                   </View>
                 ))
+              )}
+            </View>
+          ) : null}
+
+            {activeReport === 'income-expenses' ? (
+            <View style={{ marginTop: 10 }}>
+              {/* Always show totals - use monthlyIncomeExpenses if available, otherwise use reportsSummary */}
+              <Text style={styles.label}>סיכום כללי</Text>
+              <View style={styles.reportUnitKpiGrid}>
+                <View style={styles.reportUnitKpiItem}>
+                  <Text style={styles.reportUnitKpiLabel}>הכנסות</Text>
+                  <Text style={[styles.reportUnitKpiValue, { color: '#10b981' }]}>
+                    {formatMoney(
+                      monthlyIncomeExpenses?.total_income ?? 
+                      reportsSummary?.totalRevenue ?? 
+                      totalRevenue
+                    )}
+                  </Text>
+                </View>
+                <View style={styles.reportUnitKpiItem}>
+                  <Text style={styles.reportUnitKpiLabel}>הוצאות</Text>
+                  <Text style={[styles.reportUnitKpiValue, { color: '#ef4444' }]}>
+                    {formatMoney(
+                      monthlyIncomeExpenses?.total_expenses ?? 
+                      reportsSummary?.totalExpenses ?? 
+                      totalExpenses
+                    )}
+                  </Text>
+                </View>
+              </View>
+
+              {loadingMonthlyReport ? (
+                <Text style={[styles.progressNote, { marginTop: 16 }]}>טוען פירוט חודשי...</Text>
+              ) : monthlyIncomeExpenses ? (
+                <>
+
+                  <Text style={[styles.label, { marginTop: 16 }]}>פירוט חודשי</Text>
+                  {monthlyIncomeExpenses.monthly_data.length === 0 ? (
+                    <Text style={styles.progressNote}>אין נתונים</Text>
+                  ) : (
+                    monthlyIncomeExpenses.monthly_data.map((monthData) => {
+                      const monthDate = new Date(monthData.month + '-01');
+                      const monthName = monthDate.toLocaleDateString('he-IL', { year: 'numeric', month: 'long' });
+                      return (
+                        <View key={monthData.month} style={[styles.card, { marginTop: 12, borderColor: '#10b981' }]}>
+                          <Text style={[styles.title, { fontSize: 18 }]}>{monthName}</Text>
+                          <View style={styles.reportUnitKpiGrid}>
+                            <View style={styles.reportUnitKpiItem}>
+                              <Text style={styles.reportUnitKpiLabel}>הכנסות</Text>
+                              <Text style={[styles.reportUnitKpiValue, { color: '#10b981' }]}>
+                                {formatMoney(monthData.income)}
+                              </Text>
+                            </View>
+                            <View style={styles.reportUnitKpiItem}>
+                              <Text style={styles.reportUnitKpiLabel}>הוצאות</Text>
+                              <Text style={[styles.reportUnitKpiValue, { color: '#ef4444' }]}>
+                                {formatMoney(monthData.expenses)}
+                              </Text>
+                            </View>
+                            <View style={styles.reportUnitKpiItem}>
+                              <Text style={styles.reportUnitKpiLabel}>יתרה נטו</Text>
+                              <Text style={[styles.reportUnitKpiValue, { 
+                                color: monthData.net >= 0 ? '#10b981' : '#ef4444' 
+                              }]}>
+                                {formatMoney(monthData.net)}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      );
+                    })
+                  )}
+                </>
+              ) : (
+                <Text style={[styles.progressNote, { marginTop: 16 }]}>שגיאה בטעינת פירוט חודשי</Text>
               )}
             </View>
           ) : null}
@@ -7162,68 +7324,27 @@ function EditInvoiceModal({
   formatMoney,
 }: EditInvoiceModalProps) {
   const [editedInvoice, setEditedInvoice] = useState<SavedInvoice>({ ...invoice });
-  const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
-  const [newItem, setNewItem] = useState<InvoiceItem>({
-    name: '',
-    quantity: 1,
-    unit_price: 0,
-    total_price: 0,
-  });
 
-  const data = editedInvoice.extracted_data || {
-    total_price: editedInvoice.total_price,
-    currency: editedInvoice.currency || 'ILS',
-    items: [],
-    vendor: editedInvoice.vendor,
-    date: editedInvoice.date,
-    invoice_number: editedInvoice.invoice_number,
+  // Simple 2 field structure
+  const extractedData = editedInvoice.extracted_data || {};
+  const data = {
+    total_price: editedInvoice.total_price || extractedData.total_price || null,
+    product_description: extractedData.product_description || null
   };
 
-  const updateData = (updates: Partial<ExtractedInvoiceData>) => {
+  const updateData = (updates: any) => {
     const newData = { ...data, ...updates };
+    
     setEditedInvoice({
       ...editedInvoice,
       extracted_data: newData,
       total_price: newData.total_price,
-      currency: newData.currency,
-      vendor: newData.vendor || null,
-      date: newData.date || null,
-      invoice_number: newData.invoice_number || null,
     });
   };
 
-  const handleAddItem = () => {
-    if (!newItem.name.trim()) {
-      Alert.alert('שגיאה', 'יש להזין שם פריט');
-      return;
-    }
-    const items = [...(data.items || []), { ...newItem }];
-    updateData({ items });
-    setNewItem({ name: '', quantity: 1, unit_price: 0, total_price: 0 });
-  };
 
-  const handleUpdateItem = (index: number, updates: Partial<InvoiceItem>) => {
-    const items = [...(data.items || [])];
-    items[index] = { ...items[index], ...updates };
-    if (updates.quantity !== undefined || updates.unit_price !== undefined) {
-      items[index].total_price = (items[index].quantity || 0) * (items[index].unit_price || 0);
-    }
-    updateData({ items });
-    setEditingItemIndex(null);
-  };
-
-  const handleRemoveItem = (index: number) => {
-    const items = [...(data.items || [])];
-    items.splice(index, 1);
-    updateData({ items });
-  };
 
   const handleSave = () => {
-    // Recalculate total if items exist
-    if (data.items && data.items.length > 0) {
-      const calculatedTotal = data.items.reduce((sum, item) => sum + (item.total_price || 0), 0);
-      updateData({ total_price: calculatedTotal });
-    }
     onSave(editedInvoice);
   };
 
@@ -7235,47 +7356,19 @@ function EditInvoiceModal({
           
           <ScrollView style={styles.editInvoiceScroll}>
             <View style={styles.field}>
-              <Text style={styles.label}>ספק</Text>
+              <Text style={styles.label}>מהות המוצר</Text>
               <TextInput
-                style={styles.input}
-                value={data.vendor || ''}
-                onChangeText={(text) => updateData({ vendor: text || null })}
-                placeholder="הזן שם ספק"
+                style={[styles.input, { minHeight: 100, textAlignVertical: 'top' }]}
+                value={data.product_description || ''}
+                onChangeText={(text) => updateData({ product_description: text || null })}
+                placeholder="הזן תיאור המוצר או השירות"
+                multiline
+                numberOfLines={4}
               />
             </View>
 
             <View style={styles.field}>
-              <Text style={styles.label}>תאריך</Text>
-              <TextInput
-                style={styles.input}
-                value={data.date || ''}
-                onChangeText={(text) => updateData({ date: text || null })}
-                placeholder="YYYY-MM-DD"
-              />
-            </View>
-
-            <View style={styles.field}>
-              <Text style={styles.label}>מספר חשבונית</Text>
-              <TextInput
-                style={styles.input}
-                value={data.invoice_number || ''}
-                onChangeText={(text) => updateData({ invoice_number: text || null })}
-                placeholder="הזן מספר חשבונית"
-              />
-            </View>
-
-            <View style={styles.field}>
-              <Text style={styles.label}>מטבע</Text>
-              <TextInput
-                style={styles.input}
-                value={data.currency || 'ILS'}
-                onChangeText={(text) => updateData({ currency: text || 'ILS' })}
-                placeholder="ILS"
-              />
-            </View>
-
-            <View style={styles.field}>
-              <Text style={styles.label}>סכום כולל</Text>
+              <Text style={styles.label}>מחיר מלא</Text>
               <TextInput
                 style={styles.input}
                 value={data.total_price?.toString() || ''}
@@ -7286,109 +7379,6 @@ function EditInvoiceModal({
                 keyboardType="numeric"
                 placeholder="0.00"
               />
-            </View>
-
-            <View style={styles.field}>
-              <Text style={styles.label}>פריטים</Text>
-              
-              {(data.items || []).map((item, index) => (
-                <View key={index} style={styles.editItemRow}>
-                  {editingItemIndex === index ? (
-                    <>
-                      <TextInput
-                        style={[styles.input, { flex: 1, marginBottom: 8 }]}
-                        value={item.name}
-                        onChangeText={(text) => handleUpdateItem(index, { name: text })}
-                        placeholder="שם פריט"
-                      />
-                      <View style={{ flexDirection: 'row', gap: 8 }}>
-                        <TextInput
-                          style={[styles.input, { flex: 1 }]}
-                          value={item.quantity.toString()}
-                          onChangeText={(text) => {
-                            const qty = parseFloat(text) || 0;
-                            handleUpdateItem(index, { quantity: qty });
-                          }}
-                          keyboardType="numeric"
-                          placeholder="כמות"
-                        />
-                        <TextInput
-                          style={[styles.input, { flex: 1 }]}
-                          value={item.unit_price.toString()}
-                          onChangeText={(text) => {
-                            const price = parseFloat(text) || 0;
-                            handleUpdateItem(index, { unit_price: price });
-                          }}
-                          keyboardType="numeric"
-                          placeholder="מחיר יחידה"
-                        />
-                      </View>
-                      <Pressable
-                        onPress={() => setEditingItemIndex(null)}
-                        style={styles.saveItemButton}
-                      >
-                        <Text style={styles.saveItemButtonText}>שמור</Text>
-                      </Pressable>
-                    </>
-                  ) : (
-                    <>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.itemName}>{item.name}</Text>
-                        <Text style={styles.itemQuantity}>
-                          {item.quantity} × {formatMoney(item.unit_price, data.currency)} = {formatMoney(item.total_price, data.currency)}
-                        </Text>
-                      </View>
-                      <Pressable
-                        onPress={() => setEditingItemIndex(index)}
-                        style={styles.editItemButton}
-                      >
-                        <Text style={styles.editItemButtonText}>ערוך</Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={() => handleRemoveItem(index)}
-                        style={styles.removeItemButton}
-                      >
-                        <Text style={styles.removeItemButtonText}>מחק</Text>
-                      </Pressable>
-                    </>
-                  )}
-                </View>
-              ))}
-
-              <View style={styles.addItemSection}>
-                <Text style={styles.label}>הוסף פריט חדש</Text>
-                <TextInput
-                  style={styles.input}
-                  value={newItem.name}
-                  onChangeText={(text) => setNewItem({ ...newItem, name: text })}
-                  placeholder="שם פריט"
-                />
-                <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-                  <TextInput
-                    style={[styles.input, { flex: 1 }]}
-                    value={newItem.quantity.toString()}
-                    onChangeText={(text) => {
-                      const qty = parseFloat(text) || 0;
-                      setNewItem({ ...newItem, quantity: qty, total_price: qty * newItem.unit_price });
-                    }}
-                    keyboardType="numeric"
-                    placeholder="כמות"
-                  />
-                  <TextInput
-                    style={[styles.input, { flex: 1 }]}
-                    value={newItem.unit_price.toString()}
-                    onChangeText={(text) => {
-                      const price = parseFloat(text) || 0;
-                      setNewItem({ ...newItem, unit_price: price, total_price: newItem.quantity * price });
-                    }}
-                    keyboardType="numeric"
-                    placeholder="מחיר יחידה"
-                  />
-                </View>
-                <Pressable onPress={handleAddItem} style={styles.addItemButton}>
-                  <Text style={styles.addItemButtonText}>+ הוסף פריט</Text>
-                </Pressable>
-              </View>
             </View>
           </ScrollView>
 
@@ -7457,69 +7447,129 @@ function InvoicesScreen({
 
   const handlePickImage = async () => {
     try {
+      console.log('handlePickImage called');
       const result = await launchImageLibrary({
         mediaType: 'photo',
         selectionLimit: 1,
         includeBase64: true,
       });
-      if (result.didCancel) return;
-      
-      const asset = result.assets?.[0];
-      const base64 = asset?.base64;
-      const mime = asset?.type || 'image/jpeg';
-      if (!base64) {
-        Alert.alert('שגיאה', 'לא ניתן לקרוא את התמונה שנבחרה');
+      console.log('Image picker result:', result);
+      if (result.didCancel) {
+        console.log('User cancelled image picker');
         return;
       }
-      const dataUri = `data:${mime};base64,${base64}`;
+      
+      const asset = result.assets?.[0];
+      console.log('Selected asset:', asset);
+      if (!asset?.uri) {
+        console.error('No URI in selected asset');
+        setTimeout(() => {
+          Alert.alert('שגיאה', 'לא נבחר קובץ');
+        }, 100);
+        return;
+      }
+      
+      const mime = asset.type || 'image/jpeg';
+      let dataUri: string;
+      
+      // If base64 is available, use it
+      if (asset.base64) {
+        console.log('Using base64 from asset');
+        dataUri = `data:${mime};base64,${asset.base64}`;
+      } else {
+        // If base64 is not available, use the URI
+        // We'll need to handle this differently when sending to backend
+        console.log('Base64 not available, using URI:', asset.uri);
+        dataUri = asset.uri;
+      }
+      
+      console.log('Setting selected image, dataUri type:', dataUri.startsWith('data:') ? 'base64' : 'uri');
       setSelectedImage(dataUri);
     } catch (err: any) {
-      Alert.alert('שגיאה', err?.message || 'לא ניתן לבחור תמונה');
+      console.error('Error picking image:', err);
+      setTimeout(() => {
+        Alert.alert('שגיאה', err?.message || 'לא ניתן לבחור תמונה');
+      }, 100);
     }
   };
 
   const handleProcessInvoice = async () => {
     if (!selectedImage) {
-      Alert.alert('שגיאה', 'יש לבחור תמונה תחילה');
+      setTimeout(() => {
+        Alert.alert('שגיאה', 'יש לבחור תמונה תחילה');
+      }, 100);
       return;
     }
 
+    console.log('Processing invoice, image type:', selectedImage.startsWith('data:') ? 'base64' : 'uri');
     setProcessing(true);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/invoices/process`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ image: selectedImage }),
-      });
+      let response: Response;
+      
+      // If image is a data URI (base64), send as JSON
+      if (selectedImage.startsWith('data:')) {
+        console.log('Sending image as JSON (base64)');
+        response = await fetch(`${API_BASE_URL}/api/invoices/process`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ image: selectedImage }),
+        });
+      } else {
+        // If image is a URI, send as multipart form data
+        console.log('Sending image as multipart form data (URI)');
+        const formData = new FormData();
+        formData.append('image', {
+          uri: selectedImage,
+          type: 'image/jpeg',
+          name: 'invoice.jpg',
+        } as any);
+        
+        response = await fetch(`${API_BASE_URL}/api/invoices/process`, {
+          method: 'POST',
+          // Don't set Content-Type header - let React Native set it with boundary
+          body: formData,
+        });
+      }
+
+      console.log('Invoice process response status:', response.status);
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
+        console.error('Invoice process error:', errorText);
         throw new Error(errorText || `HTTP ${response.status}`);
       }
 
       const data = await response.json();
+      console.log('Invoice process response data:', data);
       
       // Check if invoice was saved
       if (data.saved && data.id) {
         setSelectedImage(null);
         await loadInvoices();
-        Alert.alert('הצלחה', 'החשבונית נשמרה בהצלחה');
+        setTimeout(() => {
+          Alert.alert('הצלחה', 'החשבונית נשמרה בהצלחה');
+        }, 100);
       } else {
         // Invoice processed but not saved - might be table issue
         console.warn('Invoice processed but not saved to database:', data);
-        Alert.alert(
-          'אזהרה', 
-          'החשבונית עובדה אך לא נשמרה במסד הנתונים. ודא שהטבלה קיימת ב-Supabase.'
-        );
+        setTimeout(() => {
+          Alert.alert(
+            'אזהרה', 
+            'החשבונית עובדה אך לא נשמרה במסד הנתונים. ודא שהטבלה קיימת ב-Supabase.'
+          );
+        }, 100);
         setSelectedImage(null);
         await loadInvoices(); // Still try to reload in case it was saved
       }
     } catch (err: any) {
+      console.error('Error processing invoice:', err);
       const errorMessage = err.message || 'שגיאה בעיבוד החשבונית';
-      Alert.alert('שגיאה', errorMessage);
+      setTimeout(() => {
+        Alert.alert('שגיאה', errorMessage);
+      }, 100);
     } finally {
       setProcessing(false);
     }
@@ -7644,8 +7694,12 @@ function InvoicesScreen({
               </View>
             ) : (
               <Pressable
-                onPress={handlePickImage}
+                onPress={() => {
+                  console.log('Upload button pressed');
+                  handlePickImage();
+                }}
                 style={styles.uploadImageButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <Text style={styles.uploadImageButtonText}>+ העלה תמונה</Text>
               </Pressable>
@@ -7679,14 +7733,10 @@ function InvoicesScreen({
           ) : (
             <View style={styles.invoicesList}>
               {invoices.map((invoice) => {
-                const data = invoice.extracted_data || {
-                  total_price: invoice.total_price,
-                  currency: invoice.currency || 'ILS',
-                  items: [],
-                  vendor: invoice.vendor,
-                  date: invoice.date,
-                  invoice_number: invoice.invoice_number,
-                };
+                // Simple 2 field structure
+                const extractedData = invoice.extracted_data || {};
+                const totalPrice = invoice.total_price || extractedData.total_price;
+                const productDescription = extractedData.product_description || 'ללא תיאור';
                 
                 return (
                   <Pressable
@@ -7699,20 +7749,12 @@ function InvoicesScreen({
                       style={styles.invoiceThumbnail}
                     />
                     <View style={styles.invoiceCardContent}>
-                      <Text style={styles.invoiceCardVendor}>
-                        {data.vendor || 'ללא ספק'}
-                      </Text>
-                      <Text style={styles.invoiceCardDate}>
-                        {formatDate(data.date || invoice.created_at)}
+                      <Text style={styles.invoiceCardProduct}>
+                        {productDescription}
                       </Text>
                       <Text style={styles.invoiceCardTotal}>
-                        {formatMoney(data.total_price, data.currency)}
+                        {formatMoney(totalPrice, invoice.currency || 'ILS')}
                       </Text>
-                      {data.invoice_number && (
-                        <Text style={styles.invoiceCardNumber}>
-                          #{data.invoice_number}
-                        </Text>
-                      )}
                     </View>
                     <Pressable
                       onPress={(e) => {
@@ -10728,6 +10770,12 @@ const styles = StyleSheet.create({
   invoiceCardContent: {
     flex: 1,
     gap: 4,
+  },
+  invoiceCardProduct: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
   },
   invoiceCardVendor: {
     fontSize: 16,
