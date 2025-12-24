@@ -57,7 +57,59 @@ jobs:
             CODE_SIGNING_ALLOWED=NO
           cd ..
       
-      - name: Upload Archive artifact
+      - name: Create ExportOptions.plist
+        run: |
+          mkdir -p ios/build/export
+          cat > ios/ExportOptions.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>development</string>
+            <key>teamID</key>
+            <string></string>
+            <key>compileBitcode</key>
+            <false/>
+            <key>uploadSymbols</key>
+            <false/>
+            <key>uploadBitcode</key>
+            <false/>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>signingCertificate</key>
+            <string></string>
+            <key>provisioningProfiles</key>
+            <dict>
+            </dict>
+          </dict>
+          </plist>
+          EOF
+      
+      - name: Export IPA (Attempt)
+        run: |
+          cd ios
+          xcodebuild -exportArchive \
+            -archivePath ./build/FrontNative.xcarchive \
+            -exportPath ./build/export \
+            -exportOptionsPlist ./ExportOptions.plist \
+            -allowProvisioningUpdates \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO || echo "⚠️ IPA export failed (signing required), but archive is available"
+          cd ..
+        continue-on-error: true
+      
+      - name: Upload IPA artifact (if created)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-ipa
+          path: ios/build/export/*.ipa
+          retention-days: 30
+        continue-on-error: true
+      
+      - name: Upload Archive artifact (fallback)
         uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -67,12 +119,15 @@ jobs:
       
       - name: Build status
         run: |
-          if [ -d ios/build/FrontNative.xcarchive ]; then
+          if [ -f ios/build/export/*.ipa ]; then
+            echo "✅ IPA file created successfully!"
+            echo "📦 IPA is available in the 'ios-ipa' artifact"
+          elif [ -d ios/build/FrontNative.xcarchive ]; then
             echo "✅ iOS archive created successfully!"
-            echo "📦 Archive is available in the artifacts"
-            echo "💡 Note: To create IPA, you'll need to export the archive in Xcode with proper signing"
+            echo "📦 Archive is available in the 'ios-archive' artifact"
+            echo "💡 Note: IPA export requires code signing. Archive can be exported to IPA on a Mac."
           else
-            echo "❌ Archive creation failed"
+            echo "❌ Build failed"
             exit 1
           fi
 
