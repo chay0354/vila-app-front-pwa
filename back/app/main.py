@@ -500,13 +500,17 @@ def create_inspection(payload: dict):
                 existing_resp = requests.get(
                     f"{REST_URL}/inspection_tasks",
                     headers=SERVICE_HEADERS,
-                    params={"inspection_id": f"eq.{inspection_id}", "select": "id"}
+                    params={"inspection_id": f"eq.{inspection_id}", "select": "id,name"}
                 )
                 if existing_resp.status_code == 200:
                     existing_tasks = existing_resp.json() or []
                     existing_task_ids = {t.get("id") for t in existing_tasks if t.get("id")}
-            except:
-                pass  # If we can't get existing tasks, we'll try to insert/update all
+                    print(f"Found {len(existing_task_ids)} existing tasks for inspection {inspection_id}: {existing_task_ids}")
+                else:
+                    print(f"No existing tasks found for inspection {inspection_id} (status: {existing_resp.status_code})")
+            except Exception as e:
+                print(f"Error getting existing tasks for inspection {inspection_id}: {str(e)}")
+                # If we can't get existing tasks, we'll try to insert/update all
             
             # Upsert tasks one by one (update if exists, insert if not)
             for task in tasks:
@@ -518,10 +522,15 @@ def create_inspection(payload: dict):
                         "completed": bool(task.get("completed", False)),  # Ensure boolean
                     }
                     task_id = task_data["id"]
+                    print(f"Saving task {task_id} ({task_data['name']}): completed={task_data['completed']} (type: {type(task_data['completed']).__name__})")
                     
-                    # Try to update if task exists, otherwise insert
-                    if task_id in existing_task_ids:
-                        # Task exists, update it
+                    # Try to update if task exists for THIS inspection, otherwise insert
+                    # IMPORTANT: Check if task exists for this specific inspection_id
+                    task_exists_for_this_inspection = task_id in existing_task_ids
+                    
+                    if task_exists_for_this_inspection:
+                        # Task exists for this inspection, update it
+                        print(f"  → Updating existing task {task_id} for inspection {inspection_id}")
                         update_resp = requests.patch(
                             f"{REST_URL}/inspection_tasks?id=eq.{task_id}&inspection_id=eq.{inspection_id}",
                             headers={**SERVICE_HEADERS, "Prefer": "return=representation"},
@@ -529,8 +538,10 @@ def create_inspection(payload: dict):
                         )
                         if update_resp.status_code in [200, 201, 204]:
                             saved_tasks.append(task_data)
+                            print(f"  ✓ Task {task_id} updated successfully")
                         else:
-                            # Update failed, try insert
+                            # Update failed, try insert (maybe task was deleted?)
+                            print(f"  ⚠ Update failed (status {update_resp.status_code}), trying insert...")
                             task_resp = requests.post(
                                 f"{REST_URL}/inspection_tasks",
                                 headers=SERVICE_HEADERS,
@@ -538,12 +549,19 @@ def create_inspection(payload: dict):
                             )
                             if task_resp.status_code in [200, 201]:
                                 saved_tasks.append(task_data)
+                                print(f"  ✓ Task {task_id} inserted successfully (after update failed)")
                             elif task_resp.status_code == 404:
-                                saved_tasks.append(task_data)  # Table doesn't exist, but include in response
+                                # Table doesn't exist - this is a real error, don't treat as success
+                                error_text = task_resp.text[:200] if task_resp.text else ""
+                                print(f"  ✗ ERROR: Table doesn't exist (404) - task {task_id} NOT saved: {error_text}")
+                                failed_tasks.append(task_data)
                             else:
+                                error_text = task_resp.text[:200] if task_resp.text else ""
+                                print(f"  ✗ ERROR: Failed to insert task {task_id} after update failed: {task_resp.status_code} {error_text}")
                                 failed_tasks.append(task_data)
                     else:
-                        # Task doesn't exist, insert it
+                        # Task doesn't exist for this inspection, insert it
+                        print(f"  → Inserting new task {task_id} for inspection {inspection_id}")
                         task_resp = requests.post(
                             f"{REST_URL}/inspection_tasks",
                             headers=SERVICE_HEADERS,
@@ -551,10 +569,16 @@ def create_inspection(payload: dict):
                         )
                         if task_resp.status_code in [200, 201]:
                             saved_tasks.append(task_data)
+                            print(f"  ✓ Task {task_id} inserted successfully")
                         elif task_resp.status_code == 404:
-                            saved_tasks.append(task_data)  # Table doesn't exist, but include in response
+                            # Table doesn't exist - this is a real error, don't treat as success
+                            error_text = task_resp.text[:200] if task_resp.text else ""
+                            print(f"  ✗ ERROR: Table doesn't exist (404) - task {task_id} NOT saved: {error_text}")
+                            failed_tasks.append(task_data)
                         elif task_resp.status_code == 409:
-                            # Conflict - task was created by another request, try update
+                            # Conflict - task ID already exists (maybe for another inspection?)
+                            # Try to update it for this inspection_id
+                            print(f"  ⚠ Conflict (409) - task {task_id} may exist for another inspection, trying update...")
                             try:
                                 update_resp = requests.patch(
                                     f"{REST_URL}/inspection_tasks?id=eq.{task_id}&inspection_id=eq.{inspection_id}",
@@ -563,13 +587,18 @@ def create_inspection(payload: dict):
                                 )
                                 if update_resp.status_code in [200, 201, 204]:
                                     saved_tasks.append(task_data)
+                                    print(f"  ✓ Task {task_id} updated after conflict")
                                 else:
+                                    error_text = update_resp.text[:200] if update_resp.text else ""
+                                    print(f"  ✗ ERROR: Failed to update task {task_id} after conflict: {update_resp.status_code} {error_text}")
                                     failed_tasks.append(task_data)
-                            except:
+                            except Exception as e:
+                                print(f"  ✗ ERROR: Exception updating task {task_id} after conflict: {str(e)}")
                                 failed_tasks.append(task_data)
                         else:
                             error_text = task_resp.text[:200] if task_resp.text else ""
-                            print(f"Warning: Failed to save task {task_id}: {task_resp.status_code} {error_text}")
+                            print(f"  ✗ ERROR: Failed to insert task {task_id}: {task_resp.status_code} {error_text}")
+                            print(f"  Task data: {task_data}")
                             failed_tasks.append(task_data)
                 except requests.exceptions.HTTPError as e:
                     # If table doesn't exist (404), that's OK
@@ -601,25 +630,59 @@ def create_inspection(payload: dict):
             
             # Only delete tasks that are no longer in the list (cleanup)
             # But only if we successfully saved the new tasks
-            if saved_tasks and len(saved_tasks) > 0:
+            # IMPORTANT: Only delete if we saved ALL tasks successfully
+            # Also, only delete tasks for THIS specific inspection_id
+            if saved_tasks and len(saved_tasks) == len(tasks) and len(failed_tasks) == 0:
                 try:
                     saved_task_ids = {t["id"] for t in saved_tasks}
-                    # Delete tasks that exist in DB but are not in the new list
+                    # Delete tasks that exist in DB for THIS inspection but are not in the new list
                     if existing_task_ids:
                         tasks_to_delete = existing_task_ids - saved_task_ids
-                        for task_id_to_delete in tasks_to_delete:
-                            try:
-                                requests.delete(
-                                    f"{REST_URL}/inspection_tasks?id=eq.{task_id_to_delete}&inspection_id=eq.{inspection_id}",
-                                    headers=SERVICE_HEADERS
-                                )
-                            except:
-                                pass  # Ignore delete errors
-                except:
-                    pass  # Ignore cleanup errors
+                        if tasks_to_delete:
+                            print(f"Cleaning up {len(tasks_to_delete)} orphaned tasks for inspection {inspection_id}: {tasks_to_delete}")
+                            for task_id_to_delete in tasks_to_delete:
+                                try:
+                                    # CRITICAL: Filter by BOTH id AND inspection_id to ensure we only delete tasks for this inspection
+                                    delete_resp = requests.delete(
+                                        f"{REST_URL}/inspection_tasks?id=eq.{task_id_to_delete}&inspection_id=eq.{inspection_id}",
+                                        headers=SERVICE_HEADERS
+                                    )
+                                    if delete_resp.status_code in [200, 204]:
+                                        print(f"  ✓ Deleted orphaned task {task_id_to_delete} for inspection {inspection_id}")
+                                    else:
+                                        print(f"  ⚠ Failed to delete task {task_id_to_delete} for inspection {inspection_id}: {delete_resp.status_code}")
+                                except Exception as e:
+                                    print(f"  ✗ Error deleting task {task_id_to_delete} for inspection {inspection_id}: {str(e)}")
+                        else:
+                            print(f"No orphaned tasks to clean up for inspection {inspection_id}")
+                    else:
+                        print(f"No existing tasks found for inspection {inspection_id}, skipping cleanup")
+                except Exception as e:
+                    print(f"Error during cleanup for inspection {inspection_id}: {str(e)}")
+            else:
+                if len(failed_tasks) > 0:
+                    print(f"Skipping cleanup for inspection {inspection_id} - {len(failed_tasks)} tasks failed to save")
+                elif len(saved_tasks) < len(tasks):
+                    print(f"Skipping cleanup for inspection {inspection_id} - only {len(saved_tasks)}/{len(tasks)} tasks saved")
             
             # Log summary
             print(f"Inspection {inspection_id}: Saved {len(saved_tasks)}/{len(tasks)} tasks. Failed: {len(failed_tasks)}")
+            if failed_tasks:
+                print(f"WARNING: {len(failed_tasks)} tasks failed to save for inspection {inspection_id}")
+                if len(failed_tasks) <= 5:
+                    for ft in failed_tasks:
+                        print(f"  Failed task: {ft.get('id')} - {ft.get('name')}")
+                else:
+                    print(f"  First 5 failed tasks:")
+                    for ft in failed_tasks[:5]:
+                        print(f"    {ft.get('id')} - {ft.get('name')}")
+            
+            if len(saved_tasks) < len(tasks):
+                print(f"WARNING: Only {len(saved_tasks)}/{len(tasks)} tasks saved for inspection {inspection_id}")
+            
+            if len(failed_tasks) == len(tasks):
+                print(f"ERROR: All {len(tasks)} tasks failed to save for inspection {inspection_id}")
+            
             if saved_tasks:
                 return_tasks = saved_tasks
             # If all tasks failed, keep the original tasks in the response (don't lose them)
@@ -638,6 +701,7 @@ def create_inspection(payload: dict):
             "savedTasksCount": len(saved_tasks),
             "totalTasksCount": len(tasks),
             "completedTasksCount": completed_count,
+            "failedTasksCount": len(failed_tasks),
         }
     except requests.exceptions.HTTPError as e:
         error_detail = f"HTTP {e.response.status_code}: {e.response.text[:200]}" if e.response else str(e)
