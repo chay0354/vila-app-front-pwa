@@ -321,11 +321,16 @@ def delete_order(order_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/inspections")
-def inspections():
-    """Get all inspections with their tasks"""
+def inspections(type: str = None):
+    """Get all inspections with their tasks, optionally filtered by type"""
     try:
-        # First get all inspections
-        resp = requests.get(f"{REST_URL}/inspections", headers=SERVICE_HEADERS, params={"select": "*"})
+        # Build query params
+        params = {"select": "*"}
+        if type:
+            params["type"] = f"eq.{type}"
+        
+        # First get all inspections (filtered by type if provided)
+        resp = requests.get(f"{REST_URL}/inspections", headers=SERVICE_HEADERS, params=params)
         # If table doesn't exist (404), return empty array
         if resp.status_code == 404:
             return []
@@ -402,9 +407,9 @@ def inspections():
         raise HTTPException(status_code=500, detail=f"Error fetching inspections: {str(e)}")
 
 @app.get("/api/inspections")
-def api_inspections():
+def api_inspections(type: str = None):
     """Alias for /inspections to match frontend expectations"""
-    return inspections()
+    return inspections(type=type)
 
 @app.post("/api/inspections")
 def create_inspection(payload: dict):
@@ -412,6 +417,9 @@ def create_inspection(payload: dict):
     try:
         inspection_id = payload.get("id") or str(uuid.uuid4())
         order_id = payload.get("orderId") or payload.get("order_id")
+        
+        # Get inspection type (default to 'exit' for backward compatibility)
+        inspection_type = payload.get("type") or "exit"
         
         # Create or update inspection
         inspection_data = {
@@ -421,6 +429,7 @@ def create_inspection(payload: dict):
             "guest_name": payload.get("guestName") or payload.get("guest_name", ""),
             "departure_date": payload.get("departureDate") or payload.get("departure_date", ""),
             "status": payload.get("status", "זמן הביקורות טרם הגיע"),
+            "type": inspection_type,  # Add type field
         }
         
         # Check if inspection exists
