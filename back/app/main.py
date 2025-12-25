@@ -392,10 +392,16 @@ def inspections(type: str = None):
                     print(f"Task {task_data['id']} ({task_data['name']}): completed={completed} (type: {type(completed)})")
                     tasks_by_inspection[insp_id].append(task_data)
         
-        # Combine inspections with their tasks
+        # Combine inspections with their tasks and filter by type if requested
         result = []
         for inspection in inspections_list:
             insp_id = inspection.get("id")
+            inspection_type = inspection.get("type") or "exit"  # Default to 'exit' if type column doesn't exist
+            
+            # Filter by type if requested (in Python, not SQL, to handle missing column gracefully)
+            if type and inspection_type != type:
+                continue
+            
             inspection_with_tasks = inspection.copy()
             inspection_with_tasks["tasks"] = tasks_by_inspection.get(insp_id, [])
             result.append(inspection_with_tasks)
