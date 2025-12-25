@@ -29,129 +29,159 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
     initialize()
   }, [])
 
-  // Load inspections from backend
+  // Sync inspections with orders - ensure every departure date has an inspection
+  const syncInspectionsWithOrders = async () => {
+    if (orders.length === 0) return
+    
+    try {
+      // Get unique departure dates from orders
+      const departureDates = new Set<string>()
+      const ordersByDate = new Map<string, Order[]>()
+      
+      orders
+        .filter(o => o.status !== 'בוטל' && o.departureDate)
+        .forEach(o => {
+          const date = o.departureDate
+          departureDates.add(date)
+          if (!ordersByDate.has(date)) {
+            ordersByDate.set(date, [])
+          }
+          ordersByDate.get(date)!.push(o)
+        })
+      
+      // Check which departure dates already have inspections
+      const res = await fetch(`${API_BASE_URL}/api/inspections`)
+      if (res.ok) {
+        const existingInspections = await res.json()
+        const existingDates = new Set(
+          (existingInspections || []).map((insp: any) => insp.departure_date || insp.departureDate)
+        )
+        
+        // Create inspections for missing departure dates
+        const missingDates = Array.from(departureDates).filter(date => !existingDates.has(date))
+        
+        for (const date of missingDates) {
+          const ordersForDate = ordersByDate.get(date) || []
+          if (ordersForDate.length > 0) {
+            const firstOrder = ordersForDate[0]
+            const inspectionId = `INSP-${date}`
+            
+            // Create inspection with all default tasks
+            const tasks = defaultInspectionTasks.map(t => ({ ...t }))
+            
+            try {
+              await fetch(`${API_BASE_URL}/api/inspections`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  id: inspectionId,
+                  orderId: firstOrder.id,
+                  unitNumber: firstOrder.unitNumber,
+                  guestName: ordersForDate.map(o => o.guestName).join(', '),
+                  departureDate: date,
+                  status: computeInspectionStatus({ departureDate: date, tasks }),
+                  tasks,
+                }),
+              })
+              console.log(`Created inspection for departure date: ${date}`)
+            } catch (err) {
+              console.error(`Error creating inspection for date ${date}:`, err)
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error syncing inspections with orders:', err)
+    }
+  }
+
+  // Load inspections from backend - ALWAYS read from inspections table
   const loadInspections = async () => {
     console.log('Loading inspections from backend...')
+    
+    // First, sync inspections with orders to ensure all departure dates have inspections
+    await syncInspectionsWithOrders()
+    
     try {
       const res = await fetch(`${API_BASE_URL}/api/inspections`)
       if (res.ok) {
         const data = await res.json()
         console.log('Backend returned', data?.length || 0, 'inspections')
+        
+        // Group by departure date - one mission per departure date
+        const missionsByDate = new Map<string, InspectionMission>()
+        
         const loadedMissions: InspectionMission[] = (data || []).map((insp: any) => {
           const backendTasks = (insp.tasks || []).map((t: any) => ({
-            id: String(t.id), // Ensure ID is a string
+            id: String(t.id),
             name: String(t.name || ''),
-            completed: Boolean(t.completed), // Ensure it's a boolean, not string
+            completed: Boolean(t.completed),
           }))
           
-        console.log('Loaded inspection:', insp.id, 'with', backendTasks.length, 'tasks from backend')
-        console.log('Backend tasks:', backendTasks.map((t: any) => ({ id: t.id, name: t.name, completed: t.completed })))
+          console.log('Loaded inspection:', insp.id, 'with', backendTasks.length, 'tasks from backend')
           
-          // If no tasks from backend, use default tasks
-          // Otherwise, merge backend tasks with default tasks to ensure all tasks are present
+          // Merge backend tasks with default tasks
           let tasks: InspectionTask[] = []
           if (backendTasks.length === 0) {
-            // No tasks in backend, use all default tasks
             tasks = defaultInspectionTasks.map(t => ({ ...t }))
           } else {
-            // Merge: use backend tasks for completion status, but ensure all default tasks are present
-            // Match by ID first, then by name as fallback (in case IDs don't match)
             const tasksMapById = new Map(backendTasks.map((t: any) => [String(t.id), t]))
             const tasksMapByName = new Map(backendTasks.map((t: any) => [String(t.name).trim().toLowerCase(), t]))
             
             tasks = defaultInspectionTasks.map(defaultTask => {
-              // Try to find by ID first
               let backendTask: any = tasksMapById.get(String(defaultTask.id))
-              
-              // If not found by ID, try to find by name (case-insensitive, trimmed)
               if (!backendTask) {
                 const defaultTaskName = String(defaultTask.name).trim().toLowerCase()
                 backendTask = tasksMapByName.get(defaultTaskName)
               }
               
               if (backendTask) {
-                // Use backend task (preserves completion status)
-                // Make sure we preserve the completion status from backend
-                const completed = Boolean(backendTask.completed)
-                console.log(`Task ${defaultTask.id} (${defaultTask.name}): completed=${completed} from backend (matched by ${tasksMapById.has(String(defaultTask.id)) ? 'ID' : 'name'})`)
                 return { 
-                  id: String(defaultTask.id), // Always use default task ID to ensure consistency
+                  id: String(defaultTask.id),
                   name: String(backendTask.name || defaultTask.name),
-                  completed: completed // Ensure it's a boolean
+                  completed: Boolean(backendTask.completed)
                 }
               } else {
-                // Default task not in backend, add it as incomplete
-                console.log(`Task ${defaultTask.id} (${defaultTask.name}): not in backend, using default (incomplete)`)
                 return { ...defaultTask }
               }
             })
-            
-        console.log('Final merged tasks:', tasks.map(t => ({ id: t.id, name: t.name, completed: t.completed })))
           }
           
-          return {
+          const departureDate = insp.departure_date || insp.departureDate || ''
+          const mission: InspectionMission = {
             id: insp.id,
             orderId: insp.order_id || insp.orderId || '',
             unitNumber: insp.unit_number || insp.unitNumber || '',
             guestName: insp.guest_name || insp.guestName || '',
-            departureDate: insp.departure_date || insp.departureDate || '',
+            departureDate,
             status: (insp.status || 'זמן הביקורות טרם הגיע') as InspectionMission['status'],
             tasks,
           }
-        })
-        
-        if (loadedMissions.length > 0) {
-          hasLoadedFromBackend.current = true
-          // Deduplicate missions by ID to prevent duplicates
-          const missionsMap = new Map<string, InspectionMission>()
-          loadedMissions.forEach(m => missionsMap.set(m.id, m))
           
-          // Add missing missions for orders that don't have inspections yet
-          if (orders.length > 0) {
-            orders
-              .filter(o => o.status !== 'בוטל')
-              .forEach(o => {
-                // Check if we already have a mission for this order (by orderId or by inspection ID)
-                const existingByOrderId = Array.from(missionsMap.values()).find(m => m.orderId === o.id)
-                const inspectionId = `INSP-${o.id}`
-                const existingById = missionsMap.get(inspectionId)
-                
-                // Only add if this order doesn't have an inspection yet
-                if (!existingByOrderId && !existingById) {
-                  const tasks = defaultInspectionTasks.map(t => ({ ...t }))
-                  missionsMap.set(inspectionId, {
-                    id: inspectionId,
-                    orderId: o.id,
-                    unitNumber: o.unitNumber,
-                    guestName: o.guestName,
-                    departureDate: o.departureDate,
-                    tasks,
-                    status: computeInspectionStatus({ departureDate: o.departureDate, tasks }),
-                  })
-                }
-              })
+          // Group by departure date - keep the one with more completed tasks
+          const existing = missionsByDate.get(departureDate)
+          if (!existing || (existing.tasks.filter(t => t.completed).length < mission.tasks.filter(t => t.completed).length)) {
+            missionsByDate.set(departureDate, mission)
           }
           
-          // Convert map back to array (deduplicated by ID)
-          const deduplicatedMissions = Array.from(missionsMap.values())
-          console.log('Setting missions (deduplicated):', deduplicatedMissions.length, 'missions')
-          deduplicatedMissions.forEach(m => {
-            const completedCount = m.tasks.filter(t => t.completed).length
-            console.log(`  Mission ${m.id}: ${completedCount}/${m.tasks.length} tasks completed`)
-          })
-          setInspectionMissions(deduplicatedMissions)
-          return
-        } else {
-          console.log('No missions loaded from backend (empty array)')
-        }
+          return mission
+        })
+        
+        // Convert to array (one per departure date)
+        const finalMissions = Array.from(missionsByDate.values())
+        console.log('Setting missions (grouped by departure date):', finalMissions.length, 'missions')
+        finalMissions.forEach(m => {
+          const completedCount = m.tasks.filter(t => t.completed).length
+          console.log(`  Mission ${m.id} (${m.departureDate}): ${completedCount}/${m.tasks.length} tasks completed`)
+        })
+        
+        hasLoadedFromBackend.current = true
+        setInspectionMissions(finalMissions)
+      } else {
+        console.warn('Failed to load inspections:', res.status)
       }
     } catch (err) {
-      console.warn('Error loading inspections from backend:', err)
-      // Only fallback to deriving from orders if we haven't loaded from backend
-      if (orders.length > 0 && !hasLoadedFromBackend.current) {
-        console.log('Backend load failed, falling back to derive from orders')
-        deriveMissionsFromOrders()
-      }
+      console.error('Error loading inspections from backend:', err)
     }
   }
 
@@ -243,63 +273,30 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
   // Use a ref to track if we've loaded from backend to prevent overwriting
   const hasLoadedFromBackend = useRef(false)
   
-  // Always sync missions from orders to ensure every order has an inspection
-  // This ensures that when new orders are created, inspections are automatically created
-  // BUT: Don't overwrite missions that were loaded from backend - they have saved completion status
+  // Sync inspections when orders change - ensure inspections table stays in sync with orders
+  // This ensures that when new orders are created or updated, inspections are automatically synced
   useEffect(() => {
-    if (orders.length > 0 && inspectionMissions.length > 0) {
-      // Only add missing missions, don't overwrite existing ones
-      // Deduplicate by ID to prevent duplicates
-      setInspectionMissions(prev => {
-        const missionsMap = new Map<string, InspectionMission>()
-        // First, add all existing missions (deduplicated by ID)
-        prev.forEach(m => {
-          if (!missionsMap.has(m.id)) {
-            missionsMap.set(m.id, m)
-          }
-        })
-        
-        // Then add missing missions for orders
-        orders
-          .filter(o => o.status !== 'בוטל')
-          .forEach(o => {
-            // Check if we already have a mission for this order
-            const existingByOrderId = Array.from(missionsMap.values()).find(m => m.orderId === o.id)
-            const inspectionId = `INSP-${o.id}`
-            const existingById = missionsMap.get(inspectionId)
-            
-            // Only add if this order doesn't have an inspection yet
-            if (!existingByOrderId && !existingById) {
-              const tasks = defaultInspectionTasks.map(t => ({ ...t }))
-              missionsMap.set(inspectionId, {
-                id: inspectionId,
-                orderId: o.id,
-                unitNumber: o.unitNumber,
-                guestName: o.guestName,
-                departureDate: o.departureDate,
-                tasks,
-                status: computeInspectionStatus({ departureDate: o.departureDate, tasks }),
-              })
-            }
+    if (orders.length > 0 && hasLoadedFromBackend.current) {
+      // Call backend sync endpoint to ensure all departure dates have inspections
+      const syncWithBackend = async () => {
+        try {
+          await fetch(`${API_BASE_URL}/api/inspections/sync`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
           })
-        
-        // Convert map back to array (deduplicated)
-        return Array.from(missionsMap.values())
-      })
-    } else if (orders.length > 0 && inspectionMissions.length === 0 && !hasLoadedFromBackend.current) {
-      // Only derive if we have no missions at all AND haven't loaded from backend
-      // This is a fallback for when backend has no data
-      // BUT: Wait a bit to ensure backend load has a chance to complete first
-      const timeoutId = setTimeout(() => {
-        if (!hasLoadedFromBackend.current && inspectionMissions.length === 0) {
-          console.log('No missions loaded from backend after delay, deriving from orders as fallback')
-          deriveMissionsFromOrders()
+          // Reload inspections after syncing to get the latest data from backend
+          await loadInspections()
+        } catch (err) {
+          console.error('Error syncing inspections with backend:', err)
+          // Fallback to local sync
+          syncInspectionsWithOrders().then(() => {
+            loadInspections()
+          })
         }
-      }, 1000) // Wait 1 second for backend load to complete
-      
-      return () => clearTimeout(timeoutId)
+      }
+      syncWithBackend()
     }
-  }, [orders, inspectionMissions.length])
+  }, [orders.length]) // Trigger when number of orders changes
 
   const loadOrders = async () => {
     try {
@@ -497,11 +494,26 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
   return (
     <div className="exit-inspections-container">
       <div className="exit-inspections-header">
-        <button className="exit-inspections-back-button" onClick={() => navigate('/hub')}>
-          ← חזרה
-        </button>
+        <div className="exit-inspections-top-row">
+          <div className="exit-inspections-brand-badge">
+            <div className="exit-inspections-brand-dot" />
+            <span className="exit-inspections-brand-text">Seisignes</span>
+          </div>
+          <button className="exit-inspections-back-button" onClick={() => navigate('/hub')}>
+            ← חזרה
+          </button>
+        </div>
       </div>
       <div className="exit-inspections-scroll">
+        {/* Hotel name - show from first mission or most common */}
+        {sortedMissions.length > 0 && sortedMissions[0].unitNumber && (
+          <div className="exit-inspections-hotel-name">
+            <h2 className="exit-inspections-hotel-name-text">
+              {sortedMissions[0].unitNumber}
+            </h2>
+          </div>
+        )}
+        
         <div className="exit-inspections-title-section">
           <div>
             <h1 className="exit-inspections-title">ביקורת יציאת אורח</h1>
