@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { API_BASE_URL } from '../apiConfig'
-import { Order, OrderStatus, statusOptions, paymentOptions, UNIT_NAMES } from '../types/orders'
+import { Order, OrderStatus, statusOptions, paymentOptions, UNIT_NAMES, UNIT_CATEGORIES } from '../types/orders'
 import './OrderEditScreen.css'
 
 type OrderEditScreenProps = {
@@ -172,7 +172,7 @@ function OrderEditScreen({}: OrderEditScreenProps) {
       return
     }
     if (!UNIT_NAMES.includes(unitNumber.trim())) {
-      alert('יש לבחור יחידת נופש מתוך הרשימה (יחידה 1 עד יחידה 10)')
+      alert('יש לבחור יחידת נופש מתוך הרשימה')
       return
     }
     if (Number.isNaN(totalNumber) || totalNumber <= 0) {
@@ -268,20 +268,27 @@ function OrderEditScreen({}: OrderEditScreenProps) {
             </button>
             {unitOpen && (
               <div className="order-edit-select-list">
-                {UNIT_NAMES.map((option) => (
-                  <button
-                    key={option}
-                    className={`order-edit-select-item ${
-                      option === unitNumber ? 'active' : ''
-                    }`}
-                    onClick={() => {
-                      setUnitNumber(option)
-                      setUnitOpen(false)
-                    }}
-                    type="button"
-                  >
-                    {option}
-                  </button>
+                {UNIT_CATEGORIES.map((category) => (
+                  <div key={category.name}>
+                    <div className="order-edit-select-category">
+                      {category.name}
+                    </div>
+                    {category.units.map((option) => (
+                      <button
+                        key={option}
+                        className={`order-edit-select-item ${
+                          option === unitNumber ? 'active' : ''
+                        }`}
+                        onClick={() => {
+                          setUnitNumber(option)
+                          setUnitOpen(false)
+                        }}
+                        type="button"
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
                 ))}
               </div>
             )}

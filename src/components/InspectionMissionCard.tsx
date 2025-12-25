@@ -1,16 +1,19 @@
 import { useState } from 'react'
 import { InspectionMission } from '../types/inspections'
 import { computeInspectionStatus } from '../utils/inspectionUtils'
+import { categorizeTasks } from '../utils/taskCategorization'
 import './InspectionMissionCard.css'
 
 type InspectionMissionCardProps = {
   mission: InspectionMission
   onToggleTask: (missionId: string, taskId: string) => void
+  onSave: (missionId: string) => void
 }
 
 function InspectionMissionCard({
   mission,
   onToggleTask,
+  onSave,
 }: InspectionMissionCardProps) {
   const [expanded, setExpanded] = useState(false)
 
@@ -93,32 +96,48 @@ function InspectionMissionCard({
           </div>
 
           <div className="inspection-mission-tasks-list">
-            <h4 className="inspection-mission-tasks-title">רשימת משימות:</h4>
-            {mission.tasks.map(task => (
-              <div
-                key={task.id}
-                className="inspection-mission-task-item"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onToggleTask(mission.id, task.id)
-                }}
-              >
-                <div
-                  className={`inspection-mission-task-checkbox ${
-                    task.completed ? 'completed' : ''
-                  }`}
-                >
-                  {task.completed && <span className="inspection-mission-task-checkmark">✓</span>}
-                </div>
-                <span
-                  className={`inspection-mission-task-text ${
-                    task.completed ? 'completed' : ''
-                  }`}
-                >
-                  {task.name}
-                </span>
+            {categorizeTasks(mission.tasks).map(category => (
+              <div key={category.name} className="inspection-mission-task-category">
+                <h5 className="inspection-mission-task-category-title">{category.name}</h5>
+                {category.tasks.map(task => (
+                  <div
+                    key={task.id}
+                    className="inspection-mission-task-item"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onToggleTask(mission.id, task.id)
+                    }}
+                  >
+                    <div
+                      className={`inspection-mission-task-checkbox ${
+                        task.completed ? 'completed' : ''
+                      }`}
+                    >
+                      {task.completed && <span className="inspection-mission-task-checkmark">✓</span>}
+                    </div>
+                    <span
+                      className={`inspection-mission-task-text ${
+                        task.completed ? 'completed' : ''
+                      }`}
+                    >
+                      {task.name}
+                    </span>
+                  </div>
+                ))}
               </div>
             ))}
+          </div>
+
+          <div className="inspection-mission-save-section">
+            <button
+              className="inspection-mission-save-button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onSave(mission.id)
+              }}
+            >
+              שמור
+            </button>
           </div>
         </>
       )}

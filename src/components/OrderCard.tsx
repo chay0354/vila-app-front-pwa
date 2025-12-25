@@ -14,49 +14,17 @@ function OrderCard({ order, onEdit }: OrderCardProps) {
       : 0,
   )
 
-  const getStatusColor = (status: OrderStatus) => {
-    switch (status) {
-      case 'חדש':
-        return { bg: '#fef3c7', border: '#fbbf24', text: '#92400e' }
-      case 'באישור':
-        return { bg: '#dbeafe', border: '#3b82f6', text: '#1e40af' }
-      case 'שולם חלקית':
-        return { bg: '#fce7f3', border: '#ec4899', text: '#9f1239' }
-      case 'שולם':
-        return { bg: '#d1fae5', border: '#10b981', text: '#065f46' }
-      case 'בוטל':
-        return { bg: '#fee2e2', border: '#ef4444', text: '#991b1b' }
-      default:
-        return { bg: '#f3f4f6', border: '#9ca3af', text: '#374151' }
-    }
-  }
-
-  const statusColors = getStatusColor(order.status)
   const remainingAmount = order.totalAmount - order.paidAmount
 
   return (
     <div className="order-card-enhanced">
-      {/* Header with Unit and Status */}
+      {/* Header with Unit */}
       <div className="order-card-header-enhanced">
         <div className="order-card-header-left">
           <div className="order-card-title-container">
             <h3 className="order-card-unit-title">{order.unitNumber}</h3>
             <span className="order-card-id">#{order.id}</span>
           </div>
-        </div>
-        <div
-          className="order-status-badge-enhanced"
-          style={{
-            backgroundColor: statusColors.bg,
-            borderColor: statusColors.border,
-          }}
-        >
-          <span
-            className="order-status-badge-text-enhanced"
-            style={{ color: statusColors.text }}
-          >
-            {order.status}
-          </span>
         </div>
       </div>
 

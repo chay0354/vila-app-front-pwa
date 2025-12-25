@@ -153,41 +153,98 @@ const paymentOptions = [
   'אחר',
 ];
 
-// Single source of truth for vacation units in the system (10 units only)
-const UNIT_NAMES = Array.from({ length: 10 }, (_, i) => `יחידה ${i + 1}`);
+// Single source of truth for vacation units in the system
+type UnitCategory = {
+  name: string;
+  units: string[];
+};
+
+const UNIT_CATEGORIES: UnitCategory[] = [
+  {
+    name: 'מתחמים מושב כלנית',
+    units: [
+      'צימרים כלנית ריזורט',
+      'וילה ויקטוריה',
+      'וילה כלנית',
+      'וילה ממלכת אהרון',
+      'וילה בוטיק אהרון',
+      'וילה אירופה',
+    ],
+  },
+  {
+    name: 'מושב מגדל',
+    units: [
+      'וילאה 1',
+      'וילאה 2',
+      'לה כינרה',
+    ],
+  },
+  {
+    name: 'גבעת יואב',
+    units: [
+      'הודולה 1',
+      'הודולה 2',
+      'הודולה 3',
+      'הודולה 4',
+      'הודולה 5',
+    ],
+  },
+  {
+    name: 'צפת',
+    units: [
+      'בית קונפיטה',
+    ],
+  },
+];
+
+// Flatten all unit names for validation and easy access
+const UNIT_NAMES = UNIT_CATEGORIES.flatMap(category => category.units);
 
 function normalizeUnitName(raw?: string | null): string {
   const s = (raw ?? '').toString().trim();
   if (!s) return '';
   if (UNIT_NAMES.includes(s)) return s;
-  const m = s.match(/(\d+)/);
-  if (m) {
-    const n = Number(m[1]);
-    if (Number.isFinite(n) && n >= 1 && n <= 10) return `יחידה ${n}`;
-  }
-  return '';
+  // Try to find a match by partial name
+  const normalized = UNIT_NAMES.find(name => 
+    name.toLowerCase().includes(s.toLowerCase()) || 
+    s.toLowerCase().includes(name.toLowerCase())
+  );
+  return normalized || s;
 }
 
 function unitIdFromName(name: string): string {
-  const m = name.match(/(\d+)/);
-  const n = m ? Number(m[1]) : NaN;
-  if (Number.isFinite(n) && n >= 1 && n <= 10) return `unit-${n}`;
-  return 'unit-1';
+  // Generate a stable ID from the unit name
+  // Replace spaces and special chars with hyphens, convert to lowercase
+  const id = name
+    .replace(/\s+/g, '-')
+    .replace(/[^\u0590-\u05FF\w-]/g, '')
+    .toLowerCase();
+  return `unit-${id}`;
 }
 
 function normalizeMaintenanceUnitId(raw?: string | null): string {
   const s = (raw ?? '').toString().trim();
-  if (!s) return 'unit-1';
-  if (/^unit-\d+$/.test(s)) {
-    const n = Number(s.split('-')[1]);
-    if (Number.isFinite(n) && n >= 1 && n <= 10) return `unit-${n}`;
+  if (!s) {
+    // Default to first unit if empty
+    return UNIT_NAMES.length > 0 ? unitIdFromName(UNIT_NAMES[0]) : 'unit-default';
   }
-  const m = s.match(/(\d+)/);
-  if (m) {
-    const n = Number(m[1]);
-    if (Number.isFinite(n) && n >= 1 && n <= 10) return `unit-${n}`;
+  // If it's already a unit-* format, check if it matches a known unit
+  if (/^unit-/.test(s)) {
+    // Try to find matching unit name
+    const unitName = UNIT_NAMES.find(name => unitIdFromName(name) === s);
+    if (unitName) return s;
   }
-  return 'unit-1';
+  // Try to find by name match
+  const matchingUnit = UNIT_NAMES.find(name => 
+    name.toLowerCase() === s.toLowerCase() ||
+    name.includes(s) ||
+    s.includes(name)
+  );
+  if (matchingUnit) {
+    return unitIdFromName(matchingUnit);
+  }
+  // If no match, generate ID from the string itself
+  return unitIdFromName(s);
 }
 
 function normalizeISODate(raw?: string | null): string {
@@ -265,7 +322,7 @@ const initialInventoryOrders: InventoryOrder[] = [
     status: 'ממתין לאישור',
     orderType: 'הזמנת עובד',
     orderedBy: 'שירה לוי',
-    unitNumber: 'יחידה 1',
+    unitNumber: UNIT_NAMES[0] || '',
   },
 ];
 
@@ -372,14 +429,35 @@ function AppContent() {
   }, [orders]);
 
   const defaultInspectionTasks: InspectionTask[] = useMemo(() => [
-    { id: '1', name: 'ניקיון חדרים', completed: false },
-    { id: '2', name: 'ניקיון מטבח', completed: false },
-    { id: '3', name: 'ניקיון שירותים', completed: false },
-    { id: '4', name: 'בדיקת מכשירים', completed: false },
-    { id: '5', name: 'בדיקת מצב ריהוט', completed: false },
-    { id: '6', name: 'החלפת מצעים', completed: false },
-    { id: '7', name: 'החלפת מגבות', completed: false },
-    { id: '8', name: 'בדיקת מלאי', completed: false },
+    // טיפול ברכיה
+    { id: '1', name: 'לשים כלור בבריכה', completed: false },
+    { id: '2', name: 'להוסיף מים בבריכה', completed: false },
+    { id: '3', name: 'לנקות רובוט ולהפעיל', completed: false },
+    { id: '4', name: 'לנקות רשת פנים המנוע', completed: false },
+    { id: '5', name: 'לעשות בקווש שטיפה לפילטר', completed: false },
+    { id: '6', name: 'לטאטא הבק מהמדרגות ומשטחי רביצה', completed: false },
+    // טיפול גקוזי
+    { id: '7', name: 'לשים כלור בגקוזי', completed: false },
+    { id: '8', name: 'להוסיף מים בגקוזי', completed: false },
+    { id: '9', name: 'לנקות רובוט גקוזי ולהפעיל', completed: false },
+    { id: '10', name: 'לנקות רשת פנים המנוע גקוזי', completed: false },
+    { id: '11', name: 'לעשות בקווש שטיפה לפילטר גקוזי', completed: false },
+    { id: '12', name: 'לטאטא הבק מהמדרגות ומשטחי רביצה גקוזי', completed: false },
+    // ניקיון
+    { id: '13', name: 'ניקיון חדרים', completed: false },
+    { id: '14', name: 'ניקיון מטבח', completed: false },
+    { id: '15', name: 'ניקיון שירותים', completed: false },
+    { id: '16', name: 'פינוי זבל לפח אשפה פנים וחוץ הוילה', completed: false },
+    // בדיקות
+    { id: '17', name: 'בדיקת מכשירים', completed: false },
+    { id: '18', name: 'בדיקת מצב ריהוט', completed: false },
+    { id: '19', name: 'החלפת מצעים', completed: false },
+    { id: '20', name: 'החלפת מגבות', completed: false },
+    { id: '21', name: 'בדיקת מלאי', completed: false },
+    { id: '22', name: 'לבדוק תקינות חדרים', completed: false },
+    // כיבוי ונעילה
+    { id: '23', name: 'כיבוי אורות פנים וחוץ הוילה', completed: false },
+    { id: '24', name: 'לנעול דלת ראשית', completed: false },
   ], []);
 
   useEffect(() => {
@@ -396,10 +474,27 @@ function AppContent() {
         .filter(o => o.status !== 'בוטל')
         .forEach(o => {
           const existing = prevByOrderId.get(o.id);
-          const tasks =
-            existing?.tasks?.length
-              ? existing.tasks
-              : defaultInspectionTasks.map(t => ({ ...t }));
+          
+          // Ensure tasks are always populated with all default tasks
+          let tasks: InspectionTask[] = [];
+          if (existing?.tasks?.length) {
+            // Merge existing tasks with default tasks to ensure all are present
+            const tasksMap = new Map(existing.tasks.map(t => [t.id, t]));
+            tasks = defaultInspectionTasks.map(defaultTask => {
+              const existingTask = tasksMap.get(defaultTask.id);
+              if (existingTask) {
+                // Use existing task (preserves completion status)
+                return { ...existingTask };
+              } else {
+                // Default task not in existing, add it as incomplete
+                return { ...defaultTask };
+              }
+            });
+          } else {
+            // No existing tasks, use all default tasks
+            tasks = defaultInspectionTasks.map(t => ({ ...t }));
+          }
+          
           next.push({
             id: existing?.id || `INSP-${o.id}`,
             orderId: o.id,
@@ -2308,7 +2403,7 @@ function OrderEditScreen({ order, isNewOrder = false, onSave, onCancel }: OrderE
       return;
     }
     if (!UNIT_NAMES.includes(unitNumber.trim())) {
-      Alert.alert('שגיאה', 'יש לבחור יחידת נופש מתוך הרשימה (יחידה 1 עד יחידה 10)');
+      Alert.alert('שגיאה', 'יש לבחור יחידת נופש מתוך הרשימה');
       return;
     }
     if (Number.isNaN(totalNumber) || totalNumber <= 0) {
@@ -2362,27 +2457,34 @@ function OrderEditScreen({ order, isNewOrder = false, onSave, onCancel }: OrderE
           </Pressable>
           {unitOpen ? (
             <View style={styles.selectList}>
-              {UNIT_NAMES.map(option => (
-                <Pressable
-                  key={option}
-                  style={[
-                    styles.selectItem,
-                    option === unitNumber && styles.selectItemActive,
-                  ]}
-                  onPress={() => {
-                    setUnitNumber(option);
-                    setUnitOpen(false);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.selectItemText,
-                      option === unitNumber && styles.selectItemTextActive,
-                    ]}
-                  >
-                    {option}
-                  </Text>
-                </Pressable>
+              {UNIT_CATEGORIES.map(category => (
+                <View key={category.name}>
+                  <View style={styles.selectCategory}>
+                    <Text style={styles.selectCategoryText}>{category.name}</Text>
+                  </View>
+                  {category.units.map(option => (
+                    <Pressable
+                      key={option}
+                      style={[
+                        styles.selectItem,
+                        option === unitNumber && styles.selectItemActive,
+                      ]}
+                      onPress={() => {
+                        setUnitNumber(option);
+                        setUnitOpen(false);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.selectItemText,
+                          option === unitNumber && styles.selectItemTextActive,
+                        ]}
+                      >
+                        {option}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
               ))}
             </View>
           ) : null}
@@ -8360,6 +8462,20 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: '#fff',
     overflow: 'hidden',
+    maxHeight: 400,
+  },
+  selectCategory: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#f8fafc',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  selectCategoryText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#475569',
+    textAlign: 'right',
   },
   selectItem: {
     paddingHorizontal: 12,

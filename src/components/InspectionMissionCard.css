@@ -116,16 +116,23 @@
   margin-top: 12px;
   display: flex;
   flex-direction: column;
+  gap: 16px;
+}
+
+.inspection-mission-task-category {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 
-.inspection-mission-tasks-title {
+.inspection-mission-task-category-title {
   font-size: 15px;
-  font-weight: 700;
-  color: #0f172a;
+  font-weight: 800;
+  color: #2563eb;
   text-align: right;
-  margin-bottom: 8px;
-  margin-top: 0;
+  margin-bottom: 4px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid #e0f2fe;
 }
 
 .inspection-mission-task-item {
@@ -171,5 +178,37 @@
 .inspection-mission-task-text.completed {
   text-decoration: line-through;
   color: #94a3b8;
+}
+
+.inspection-mission-save-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: center;
+}
+
+.inspection-mission-save-button {
+  background-color: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 32px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.2);
+}
+
+.inspection-mission-save-button:hover {
+  background-color: #1d4ed8;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  transform: translateY(-1px);
+}
+
+.inspection-mission-save-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.2);
 }
 

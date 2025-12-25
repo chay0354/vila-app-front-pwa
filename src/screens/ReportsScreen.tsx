@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { API_BASE_URL } from '../apiConfig'
 import { Order } from '../types/orders'
-import { InspectionMission } from '../types/inspections'
+import { InspectionMission, defaultInspectionTasks } from '../types/inspections'
 import { InventoryOrder, Warehouse, WarehouseItem } from '../types/warehouse'
 import { MaintenanceUnit } from '../types/maintenance'
 import { computeInspectionStatus } from '../utils/inspectionUtils'
@@ -132,24 +132,18 @@ function ReportsScreen({}: ReportsScreenProps) {
       // Derive inspection missions from orders
       const inspectionMissions: InspectionMission[] = list
         .filter((o: Order) => o.status !== 'בוטל')
-        .map((o: Order) => ({
-          id: `INSP-${o.id}`,
-          orderId: o.id,
-          unitNumber: o.unitNumber,
-          guestName: o.guestName,
-          departureDate: o.departureDate,
-          tasks: [
-            { id: '1', name: 'ניקיון חדרים', completed: false },
-            { id: '2', name: 'ניקיון מטבח', completed: false },
-            { id: '3', name: 'ניקיון שירותים', completed: false },
-            { id: '4', name: 'בדיקת מכשירים', completed: false },
-            { id: '5', name: 'בדיקת מצב ריהוט', completed: false },
-            { id: '6', name: 'החלפת מצעים', completed: false },
-            { id: '7', name: 'החלפת מגבות', completed: false },
-            { id: '8', name: 'בדיקת מלאי', completed: false },
-          ],
-          status: computeInspectionStatus({ departureDate: o.departureDate, tasks: [] }),
-        }))
+        .map((o: Order) => {
+          const tasks = defaultInspectionTasks.map(t => ({ ...t }))
+          return {
+            id: `INSP-${o.id}`,
+            orderId: o.id,
+            unitNumber: o.unitNumber,
+            guestName: o.guestName,
+            departureDate: o.departureDate,
+            tasks,
+            status: computeInspectionStatus({ departureDate: o.departureDate, tasks }),
+          }
+        })
       setMissions(inspectionMissions)
     } catch (err) {
       console.error('Error loading orders:', err)
