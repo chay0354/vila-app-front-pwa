@@ -108,17 +108,17 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
           loadedMissions.forEach(m => missionsMap.set(m.id, m))
           
           // Add missing missions for orders that don't have inspections yet
+          // IMPORTANT: Only check for missions of THIS type (cleaning), not other types
           if (orders.length > 0) {
             orders
               .filter(o => o.status !== 'בוטל')
               .forEach(o => {
-                // Check if we already have a mission for this order (by orderId or by inspection ID)
-                const existingByOrderId = Array.from(missionsMap.values()).find(m => m.orderId === o.id)
+                // Check if we already have a CLEANING inspection for this order
                 const inspectionId = `CLEAN-${o.id}`
                 const existingById = missionsMap.get(inspectionId)
                 
-                // Only add if this order doesn't have an inspection yet
-                if (!existingByOrderId && !existingById) {
+                // Only add if this order doesn't have a cleaning inspection yet
+                if (!existingById) {
                   const tasks = defaultInspectionTasks.map(t => ({ ...t }))
                   missionsMap.set(inspectionId, {
                     id: inspectionId,
@@ -260,16 +260,16 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
         })
         
         // Then add missing missions for orders
+        // IMPORTANT: Only check for missions of THIS type (cleaning), not other types
         orders
           .filter(o => o.status !== 'בוטל')
           .forEach(o => {
-            // Check if we already have a mission for this order
-            const existingByOrderId = Array.from(missionsMap.values()).find(m => m.orderId === o.id)
+            // Check if we already have a CLEANING inspection for this order
             const inspectionId = `CLEAN-${o.id}`
             const existingById = missionsMap.get(inspectionId)
             
-            // Only add if this order doesn't have an inspection yet
-            if (!existingByOrderId && !existingById) {
+            // Only add if this order doesn't have a cleaning inspection yet
+            if (!existingById) {
               const tasks = defaultInspectionTasks.map(t => ({ ...t }))
               missionsMap.set(inspectionId, {
                 id: inspectionId,

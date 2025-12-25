@@ -108,17 +108,17 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
           loadedMissions.forEach(m => missionsMap.set(m.id, m))
           
           // Add missing missions for orders that don't have inspections yet
+          // IMPORTANT: Only check for missions of THIS type (exit), not other types
           if (orders.length > 0) {
             orders
               .filter(o => o.status !== 'בוטל')
               .forEach(o => {
-                // Check if we already have a mission for this order (by orderId or by inspection ID)
-                const existingByOrderId = Array.from(missionsMap.values()).find(m => m.orderId === o.id)
+                // Check if we already have an EXIT inspection for this order
                 const inspectionId = `INSP-${o.id}`
                 const existingById = missionsMap.get(inspectionId)
                 
-                // Only add if this order doesn't have an inspection yet
-                if (!existingByOrderId && !existingById) {
+                // Only add if this order doesn't have an exit inspection yet
+                if (!existingById) {
                   const tasks = defaultInspectionTasks.map(t => ({ ...t }))
                   missionsMap.set(inspectionId, {
                     id: inspectionId,
@@ -262,16 +262,16 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
         })
         
         // Then add missing missions for orders
+        // IMPORTANT: Only check for missions of THIS type (exit), not other types
         orders
           .filter(o => o.status !== 'בוטל')
           .forEach(o => {
-            // Check if we already have a mission for this order
-            const existingByOrderId = Array.from(missionsMap.values()).find(m => m.orderId === o.id)
+            // Check if we already have an EXIT inspection for this order
             const inspectionId = `INSP-${o.id}`
             const existingById = missionsMap.get(inspectionId)
             
-            // Only add if this order doesn't have an inspection yet
-            if (!existingByOrderId && !existingById) {
+            // Only add if this order doesn't have an exit inspection yet
+            if (!existingById) {
               const tasks = defaultInspectionTasks.map(t => ({ ...t }))
               missionsMap.set(inspectionId, {
                 id: inspectionId,
