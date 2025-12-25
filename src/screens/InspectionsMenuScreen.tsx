@@ -34,7 +34,7 @@ function InspectionsMenuScreen({}: InspectionsMenuScreenProps) {
             <div className="inspections-menu-option-content">
               <h3 className="inspections-menu-option-title">ביקורת יציאת אורח</h3>
               <p className="inspections-menu-option-subtitle">
-                ניהול משימות ניקיון וביקורת לאחר עזיבת אורחים
+                משימות ניקיון וביקורת לאחר עזיבת אורחים
               </p>
             </div>
             <span className="inspections-menu-option-arrow">›</span>
@@ -50,7 +50,7 @@ function InspectionsMenuScreen({}: InspectionsMenuScreenProps) {
             <div className="inspections-menu-option-content">
               <h3 className="inspections-menu-option-title">ביקורת ניקיון</h3>
               <p className="inspections-menu-option-subtitle">
-                ניהול משימות ניקיון וביקורת לאחר עזיבת אורחים
+                משימות ניקיון וביקורת לאחר עזיבת אורחים
               </p>
             </div>
             <span className="inspections-menu-option-arrow">›</span>

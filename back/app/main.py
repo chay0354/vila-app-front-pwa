@@ -321,14 +321,11 @@ def delete_order(order_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/inspections")
-def inspections(type: str = None):
-    """Get all inspections with their tasks, optionally filtered by type"""
+def inspections():
+    """Get all inspections with their tasks"""
     try:
-        # Build query params (don't filter by type in SQL - column might not exist)
-        params = {"select": "*"}
-        
         # First get all inspections
-        resp = requests.get(f"{REST_URL}/inspections", headers=SERVICE_HEADERS, params=params)
+        resp = requests.get(f"{REST_URL}/inspections", headers=SERVICE_HEADERS, params={"select": "*"})
         # If table doesn't exist (404), return empty array
         if resp.status_code == 404:
             return []
@@ -392,16 +389,10 @@ def inspections(type: str = None):
                     print(f"Task {task_data['id']} ({task_data['name']}): completed={completed} (type: {type(completed)})")
                     tasks_by_inspection[insp_id].append(task_data)
         
-        # Combine inspections with their tasks and filter by type if requested
+        # Combine inspections with their tasks
         result = []
         for inspection in inspections_list:
             insp_id = inspection.get("id")
-            inspection_type = inspection.get("type") or "exit"  # Default to 'exit' if type column doesn't exist
-            
-            # Filter by type if requested (in Python, not SQL, to handle missing column gracefully)
-            if type and inspection_type != type:
-                continue
-            
             inspection_with_tasks = inspection.copy()
             inspection_with_tasks["tasks"] = tasks_by_inspection.get(insp_id, [])
             result.append(inspection_with_tasks)
@@ -411,9 +402,9 @@ def inspections(type: str = None):
         raise HTTPException(status_code=500, detail=f"Error fetching inspections: {str(e)}")
 
 @app.get("/api/inspections")
-def api_inspections(type: str = None):
+def api_inspections():
     """Alias for /inspections to match frontend expectations"""
-    return inspections(type=type)
+    return inspections()
 
 @app.post("/api/inspections")
 def create_inspection(payload: dict):
@@ -421,9 +412,6 @@ def create_inspection(payload: dict):
     try:
         inspection_id = payload.get("id") or str(uuid.uuid4())
         order_id = payload.get("orderId") or payload.get("order_id")
-        
-        # Get inspection type (default to 'exit' for backward compatibility)
-        inspection_type = payload.get("type") or "exit"
         
         # Create or update inspection
         inspection_data = {
@@ -434,10 +422,6 @@ def create_inspection(payload: dict):
             "departure_date": payload.get("departureDate") or payload.get("departure_date", ""),
             "status": payload.get("status", "זמן הביקורות טרם הגיע"),
         }
-        
-        # Try to add type field, but handle gracefully if column doesn't exist
-        # We'll try to include it, but if it fails, we'll retry without it
-        inspection_data_with_type = {**inspection_data, "type": inspection_type}
         
         # Check if inspection exists
         existing = []
@@ -450,9 +434,6 @@ def create_inspection(payload: dict):
             # If table doesn't exist (404), that's OK - we'll create it
             if check_resp.status_code == 404:
                 existing = []
-            elif check_resp.status_code == 400:
-                # Bad request might mean type column doesn't exist - try without type filter
-                existing = []
             else:
                 check_resp.raise_for_status()
                 existing = check_resp.json() or []
@@ -460,58 +441,27 @@ def create_inspection(payload: dict):
             # If table doesn't exist, that's OK
             if e.response and e.response.status_code == 404:
                 existing = []
-            elif e.response and e.response.status_code == 400:
-                # Bad request - might be missing type column, continue without it
-                existing = []
             else:
                 raise
         except Exception:
             # If any other error, assume inspection doesn't exist
             existing = []
         
-        # Try to save with type field first, fallback to without type if column doesn't exist
-        inspection_saved = False
         if existing and len(existing) > 0:
             # Update existing inspection
             try:
                 update_resp = requests.patch(
                     f"{REST_URL}/inspections?id=eq.{inspection_id}",
                     headers={**SERVICE_HEADERS, "Prefer": "return=representation"},
-                    json=inspection_data_with_type
+                    json=inspection_data
                 )
                 # If table doesn't exist (404), that's OK - will be created by migration
-                if update_resp.status_code == 404:
-                    inspection_saved = False
-                elif update_resp.status_code == 400:
-                    # Bad request - type column might not exist, try without type
-                    update_resp = requests.patch(
-                        f"{REST_URL}/inspections?id=eq.{inspection_id}",
-                        headers={**SERVICE_HEADERS, "Prefer": "return=representation"},
-                        json=inspection_data
-                    )
-                    if update_resp.status_code not in [200, 201, 204, 404]:
-                        update_resp.raise_for_status()
-                    inspection_saved = True
-                else:
+                if update_resp.status_code != 404:
                     update_resp.raise_for_status()
-                    inspection_saved = True
             except requests.exceptions.HTTPError as e:
                 # If table doesn't exist, that's OK
                 if e.response and e.response.status_code == 404:
-                    inspection_saved = False
-                elif e.response and e.response.status_code == 400:
-                    # Type column doesn't exist, try without type
-                    try:
-                        update_resp = requests.patch(
-                            f"{REST_URL}/inspections?id=eq.{inspection_id}",
-                            headers={**SERVICE_HEADERS, "Prefer": "return=representation"},
-                            json=inspection_data
-                        )
-                        if update_resp.status_code not in [200, 201, 204, 404]:
-                            update_resp.raise_for_status()
-                        inspection_saved = True
-                    except:
-                        inspection_saved = False
+                    pass
                 else:
                     raise
         else:
@@ -520,45 +470,19 @@ def create_inspection(payload: dict):
                 create_resp = requests.post(
                     f"{REST_URL}/inspections",
                     headers=SERVICE_HEADERS,
-                    json=inspection_data_with_type
+                    json=inspection_data
                 )
                 # If table doesn't exist (404), that's OK - will be created by migration
                 # If inspection already exists (409 or similar), that's also OK
-                if create_resp.status_code == 400:
-                    # Bad request - type column might not exist, try without type
-                    create_resp = requests.post(
-                        f"{REST_URL}/inspections",
-                        headers=SERVICE_HEADERS,
-                        json=inspection_data
-                    )
-                    if create_resp.status_code not in [200, 201, 404, 409]:
-                        create_resp.raise_for_status()
-                    inspection_saved = True
-                elif create_resp.status_code not in [200, 201, 404, 409]:
+                if create_resp.status_code not in [200, 201, 404, 409]:
                     create_resp.raise_for_status()
-                    inspection_saved = True
-                else:
-                    inspection_saved = True
             except requests.exceptions.HTTPError as e:
                 # If table doesn't exist (404), that's OK
                 if e.response and e.response.status_code == 404:
-                    inspection_saved = False
+                    pass
                 # If conflict (409), inspection might already exist - that's OK
                 elif e.response and e.response.status_code == 409:
-                    inspection_saved = True
-                elif e.response and e.response.status_code == 400:
-                    # Type column doesn't exist, try without type
-                    try:
-                        create_resp = requests.post(
-                            f"{REST_URL}/inspections",
-                            headers=SERVICE_HEADERS,
-                            json=inspection_data
-                        )
-                        if create_resp.status_code not in [200, 201, 404, 409]:
-                            create_resp.raise_for_status()
-                        inspection_saved = True
-                    except:
-                        inspection_saved = False
+                    pass
                 else:
                     raise
         

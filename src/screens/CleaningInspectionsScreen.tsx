@@ -15,7 +15,6 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
   const navigate = useNavigate()
   const [orders, setOrders] = useState<Order[]>([])
   const [inspectionMissions, setInspectionMissions] = useState<InspectionMission[]>([])
-  const INSPECTION_TYPE = 'cleaning' // Different type for cleaning inspections
 
   useEffect(() => {
     // Load orders first, then inspections from backend
@@ -30,11 +29,11 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
     initialize()
   }, [])
 
-  // Load inspections from backend
+  // Load cleaning inspections from backend
   const loadInspections = async () => {
     console.log('Loading cleaning inspections from backend...')
     try {
-      const res = await fetch(`${API_BASE_URL}/api/inspections?type=${INSPECTION_TYPE}`)
+      const res = await fetch(`${API_BASE_URL}/api/cleaning-inspections`)
       if (res.ok) {
         const data = await res.json()
         console.log('Backend returned', data?.length || 0, 'cleaning inspections')
@@ -108,17 +107,17 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
           loadedMissions.forEach(m => missionsMap.set(m.id, m))
           
           // Add missing missions for orders that don't have inspections yet
-          // IMPORTANT: Only check for missions of THIS type (cleaning), not other types
           if (orders.length > 0) {
             orders
               .filter(o => o.status !== 'בוטל')
               .forEach(o => {
-                // Check if we already have a CLEANING inspection for this order
+                // Check if we already have a mission for this order (by orderId or by inspection ID)
+                const existingByOrderId = Array.from(missionsMap.values()).find(m => m.orderId === o.id)
                 const inspectionId = `CLEAN-${o.id}`
                 const existingById = missionsMap.get(inspectionId)
                 
-                // Only add if this order doesn't have a cleaning inspection yet
-                if (!existingById) {
+                // Only add if this order doesn't have an inspection yet
+                if (!existingByOrderId && !existingById) {
                   const tasks = defaultInspectionTasks.map(t => ({ ...t }))
                   missionsMap.set(inspectionId, {
                     id: inspectionId,
@@ -135,7 +134,7 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
           
           // Convert map back to array (deduplicated by ID)
           const deduplicatedMissions = Array.from(missionsMap.values())
-          console.log('Setting cleaning missions (deduplicated):', deduplicatedMissions.length, 'missions')
+          console.log('Setting missions (deduplicated):', deduplicatedMissions.length, 'missions')
           deduplicatedMissions.forEach(m => {
             const completedCount = m.tasks.filter(t => t.completed).length
             console.log(`  Mission ${m.id}: ${completedCount}/${m.tasks.length} tasks completed`)
@@ -143,7 +142,7 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
           setInspectionMissions(deduplicatedMissions)
           return
         } else {
-          console.log('No cleaning missions loaded from backend (empty array)')
+          console.log('No missions loaded from backend (empty array)')
         }
       }
     } catch (err) {
@@ -160,19 +159,15 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
   // IMPORTANT: This should ONLY be called if backend has no data
   // It should NOT overwrite missions loaded from backend
   const deriveMissionsFromOrders = async () => {
+    // Only derive if we haven't loaded from backend yet
     if (hasLoadedFromBackend.current) {
       console.log('Skipping deriveMissionsFromOrders - already loaded from backend')
       return
     }
     
     setInspectionMissions(prev => {
-      // Map by inspection ID (CLEAN- prefix) to only find cleaning inspections
-      const prevByInspectionId = new Map<string, InspectionMission>()
-      prev.forEach(m => {
-        if (m.id.startsWith('CLEAN-')) {
-          prevByInspectionId.set(m.id, m)
-        }
-      })
+      const prevByOrderId = new Map<string, InspectionMission>()
+      prev.forEach(m => prevByOrderId.set(m.orderId, m))
 
       const next: InspectionMission[] = []
       const newMissions: InspectionMission[] = []
@@ -180,8 +175,7 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
       orders
         .filter(o => o.status !== 'בוטל')
         .forEach(o => {
-          const inspectionId = `CLEAN-${o.id}`
-          const existing = prevByInspectionId.get(inspectionId)
+          const existing = prevByOrderId.get(o.id)
           const isNew = !existing
           
           // Ensure tasks are always populated with all default tasks
@@ -223,7 +217,7 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
       if (newMissions.length > 0) {
         newMissions.forEach(async (mission) => {
           try {
-            await fetch(`${API_BASE_URL}/api/inspections`, {
+            await fetch(`${API_BASE_URL}/api/cleaning-inspections`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -234,7 +228,6 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
                 departureDate: mission.departureDate,
                 status: mission.status,
                 tasks: mission.tasks,
-                type: INSPECTION_TYPE, // Add type for cleaning inspections
               }),
             })
           } catch (err) {
@@ -247,6 +240,7 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
     })
   }
 
+  // Use a ref to track if we've loaded from backend to prevent overwriting
   const hasLoadedFromBackend = useRef(false)
   
   // Always sync missions from orders to ensure every order has an inspection
@@ -266,16 +260,16 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
         })
         
         // Then add missing missions for orders
-        // IMPORTANT: Only check for missions of THIS type (cleaning), not other types
         orders
           .filter(o => o.status !== 'בוטל')
           .forEach(o => {
-            // Check if we already have a CLEANING inspection for this order
+            // Check if we already have a mission for this order
+            const existingByOrderId = Array.from(missionsMap.values()).find(m => m.orderId === o.id)
             const inspectionId = `CLEAN-${o.id}`
             const existingById = missionsMap.get(inspectionId)
             
-            // Only add if this order doesn't have a cleaning inspection yet
-            if (!existingById) {
+            // Only add if this order doesn't have an inspection yet
+            if (!existingByOrderId && !existingById) {
               const tasks = defaultInspectionTasks.map(t => ({ ...t }))
               missionsMap.set(inspectionId, {
                 id: inspectionId,
@@ -294,7 +288,16 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
       })
     } else if (orders.length > 0 && inspectionMissions.length === 0 && !hasLoadedFromBackend.current) {
       // Only derive if we have no missions at all AND haven't loaded from backend
-      deriveMissionsFromOrders()
+      // This is a fallback for when backend has no data
+      // BUT: Wait a bit to ensure backend load has a chance to complete first
+      const timeoutId = setTimeout(() => {
+        if (!hasLoadedFromBackend.current && inspectionMissions.length === 0) {
+          console.log('No missions loaded from backend after delay, deriving from orders as fallback')
+          deriveMissionsFromOrders()
+        }
+      }, 1000) // Wait 1 second for backend load to complete
+      
+      return () => clearTimeout(timeoutId)
     }
   }, [orders, inspectionMissions.length])
 
@@ -363,7 +366,7 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
     }
 
     const completedCount = mission.tasks.filter(t => t.completed).length
-    console.log('Saving cleaning mission:', missionId, 'with tasks:', mission.tasks.length, 'completed:', completedCount)
+    console.log('Saving mission:', missionId, 'with tasks:', mission.tasks.length, 'completed:', completedCount)
     console.log('Mission tasks before save:', mission.tasks.map(t => ({ id: t.id, name: t.name.substring(0, 20), completed: t.completed })))
     
     // Ensure all tasks have the correct format with boolean completed status
@@ -395,14 +398,13 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
       departureDate: mission.departureDate,
       status: mission.status,
       tasks: tasksToSave, // Use the properly formatted tasks
-      type: INSPECTION_TYPE, // Add type for cleaning inspections
     }
     console.log('Payload being sent:', JSON.stringify(payload, null, 2))
     console.log('Payload tasks with completion:', payload.tasks.map(t => ({ id: t.id, name: t.name.substring(0, 20), completed: t.completed, completedType: typeof t.completed })))
 
     // Save the entire mission with all tasks to backend
     try {
-      const response = await fetch(`${API_BASE_URL}/api/inspections`, {
+      const response = await fetch(`${API_BASE_URL}/api/cleaning-inspections`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

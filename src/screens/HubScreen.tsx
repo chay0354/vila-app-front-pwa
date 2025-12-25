@@ -114,7 +114,7 @@ function HubScreen({ userName }: HubScreenProps) {
             </button>
             <button
               className="hub-quick-action-btn hub-quick-action-green"
-              onClick={() => navigate('/inspections')}
+              onClick={() => navigate('/exit-inspections')}
               type="button"
             >
               <span className="hub-quick-action-icon">🧹</span>

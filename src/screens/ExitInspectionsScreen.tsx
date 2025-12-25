@@ -15,7 +15,6 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
   const navigate = useNavigate()
   const [orders, setOrders] = useState<Order[]>([])
   const [inspectionMissions, setInspectionMissions] = useState<InspectionMission[]>([])
-  const INSPECTION_TYPE = 'exit' // Type for exit inspections
 
   useEffect(() => {
     // Load orders first, then inspections from backend
@@ -34,7 +33,7 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
   const loadInspections = async () => {
     console.log('Loading inspections from backend...')
     try {
-      const res = await fetch(`${API_BASE_URL}/api/inspections?type=${INSPECTION_TYPE}`)
+      const res = await fetch(`${API_BASE_URL}/api/inspections`)
       if (res.ok) {
         const data = await res.json()
         console.log('Backend returned', data?.length || 0, 'inspections')
@@ -108,17 +107,17 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
           loadedMissions.forEach(m => missionsMap.set(m.id, m))
           
           // Add missing missions for orders that don't have inspections yet
-          // IMPORTANT: Only check for missions of THIS type (exit), not other types
           if (orders.length > 0) {
             orders
               .filter(o => o.status !== 'בוטל')
               .forEach(o => {
-                // Check if we already have an EXIT inspection for this order
+                // Check if we already have a mission for this order (by orderId or by inspection ID)
+                const existingByOrderId = Array.from(missionsMap.values()).find(m => m.orderId === o.id)
                 const inspectionId = `INSP-${o.id}`
                 const existingById = missionsMap.get(inspectionId)
                 
-                // Only add if this order doesn't have an exit inspection yet
-                if (!existingById) {
+                // Only add if this order doesn't have an inspection yet
+                if (!existingByOrderId && !existingById) {
                   const tasks = defaultInspectionTasks.map(t => ({ ...t }))
                   missionsMap.set(inspectionId, {
                     id: inspectionId,
@@ -167,13 +166,8 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
     }
     
     setInspectionMissions(prev => {
-      // Map by inspection ID (INSP- prefix) to only find exit inspections
-      const prevByInspectionId = new Map<string, InspectionMission>()
-      prev.forEach(m => {
-        if (m.id.startsWith('INSP-')) {
-          prevByInspectionId.set(m.id, m)
-        }
-      })
+      const prevByOrderId = new Map<string, InspectionMission>()
+      prev.forEach(m => prevByOrderId.set(m.orderId, m))
 
       const next: InspectionMission[] = []
       const newMissions: InspectionMission[] = []
@@ -181,8 +175,7 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
       orders
         .filter(o => o.status !== 'בוטל')
         .forEach(o => {
-          const inspectionId = `INSP-${o.id}`
-          const existing = prevByInspectionId.get(inspectionId)
+          const existing = prevByOrderId.get(o.id)
           const isNew = !existing
           
           // Ensure tasks are always populated with all default tasks
@@ -235,7 +228,6 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
                 departureDate: mission.departureDate,
                 status: mission.status,
                 tasks: mission.tasks,
-                type: INSPECTION_TYPE, // Add type for exit inspections
               }),
             })
           } catch (err) {
@@ -268,16 +260,16 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
         })
         
         // Then add missing missions for orders
-        // IMPORTANT: Only check for missions of THIS type (exit), not other types
         orders
           .filter(o => o.status !== 'בוטל')
           .forEach(o => {
-            // Check if we already have an EXIT inspection for this order
+            // Check if we already have a mission for this order
+            const existingByOrderId = Array.from(missionsMap.values()).find(m => m.orderId === o.id)
             const inspectionId = `INSP-${o.id}`
             const existingById = missionsMap.get(inspectionId)
             
-            // Only add if this order doesn't have an exit inspection yet
-            if (!existingById) {
+            // Only add if this order doesn't have an inspection yet
+            if (!existingByOrderId && !existingById) {
               const tasks = defaultInspectionTasks.map(t => ({ ...t }))
               missionsMap.set(inspectionId, {
                 id: inspectionId,
@@ -407,7 +399,6 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
       departureDate: mission.departureDate,
       status: mission.status,
       tasks: tasksToSave, // Use the properly formatted tasks
-      type: INSPECTION_TYPE, // Add type for exit inspections
     }
     console.log('Payload being sent:', JSON.stringify(payload, null, 2))
     console.log('Payload tasks with completion:', payload.tasks.map(t => ({ id: t.id, name: t.name.substring(0, 20), completed: t.completed, completedType: typeof t.completed })))
