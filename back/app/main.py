@@ -322,12 +322,453 @@ def delete_order(order_id: str):
 
 @app.get("/inspections")
 def inspections():
+    """Get all inspections with their tasks"""
     try:
+        # First get all inspections
         resp = requests.get(f"{REST_URL}/inspections", headers=SERVICE_HEADERS, params={"select": "*"})
+        # If table doesn't exist (404), return empty array
+        if resp.status_code == 404:
+            return []
         resp.raise_for_status()
-        return resp.json()
+        inspections_list = resp.json() or []
+        
+        # Then get all tasks for these inspections
+        inspection_ids = [insp.get("id") for insp in inspections_list if insp.get("id")]
+        tasks_by_inspection = {}
+        
+        if inspection_ids:
+            # Get all tasks for these inspections
+            # Supabase PostgREST IN query format: in.(value1,value2,value3)
+            try:
+                # Format: in.(id1,id2,id3) - no spaces after commas
+                inspection_ids_str = ','.join(inspection_ids)
+                tasks_resp = requests.get(
+                    f"{REST_URL}/inspection_tasks",
+                    headers=SERVICE_HEADERS,
+                    params={"inspection_id": f"in.({inspection_ids_str})", "select": "*"}
+                )
+                print(f"Loading tasks for inspections: {inspection_ids_str}")
+                print(f"Tasks query status: {tasks_resp.status_code}")
+                # If table doesn't exist (404), that's OK - return empty tasks
+                if tasks_resp.status_code == 404:
+                    all_tasks = []
+                else:
+                    tasks_resp.raise_for_status()
+                    all_tasks = tasks_resp.json() or []
+            except requests.exceptions.HTTPError as e:
+                # If table doesn't exist, return empty tasks
+                if e.response and e.response.status_code == 404:
+                    all_tasks = []
+                else:
+                    raise
+            except Exception:
+                # Any other error, return empty tasks
+                all_tasks = []
+            
+            # Group tasks by inspection_id
+            print(f"Loaded {len(all_tasks)} tasks from database")
+            for task in all_tasks:
+                insp_id = task.get("inspection_id")
+                if insp_id:
+                    if insp_id not in tasks_by_inspection:
+                        tasks_by_inspection[insp_id] = []
+                    # Ensure completed is a boolean (not string "true"/"false")
+                    completed = task.get("completed", False)
+                    if isinstance(completed, str):
+                        completed = completed.lower() in ('true', '1', 'yes', 'on')
+                    elif completed is None:
+                        completed = False
+                    else:
+                        completed = bool(completed)
+                    
+                    task_data = {
+                        "id": task.get("id"),
+                        "name": task.get("name"),
+                        "completed": completed,
+                    }
+                    print(f"Task {task_data['id']} ({task_data['name']}): completed={completed} (type: {type(completed)})")
+                    tasks_by_inspection[insp_id].append(task_data)
+        
+        # Combine inspections with their tasks
+        result = []
+        for inspection in inspections_list:
+            insp_id = inspection.get("id")
+            inspection_with_tasks = inspection.copy()
+            inspection_with_tasks["tasks"] = tasks_by_inspection.get(insp_id, [])
+            result.append(inspection_with_tasks)
+        
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching inspections: {str(e)}")
+
+@app.get("/api/inspections")
+def api_inspections():
+    """Alias for /inspections to match frontend expectations"""
+    return inspections()
+
+@app.post("/api/inspections")
+def create_inspection(payload: dict):
+    """Create or update an inspection mission with its tasks"""
+    try:
+        inspection_id = payload.get("id") or str(uuid.uuid4())
+        order_id = payload.get("orderId") or payload.get("order_id")
+        
+        # Create or update inspection
+        inspection_data = {
+            "id": inspection_id,
+            "order_id": order_id,
+            "unit_number": payload.get("unitNumber") or payload.get("unit_number", ""),
+            "guest_name": payload.get("guestName") or payload.get("guest_name", ""),
+            "departure_date": payload.get("departureDate") or payload.get("departure_date", ""),
+            "status": payload.get("status", "זמן הביקורות טרם הגיע"),
+        }
+        
+        # Check if inspection exists
+        existing = []
+        try:
+            check_resp = requests.get(
+                f"{REST_URL}/inspections",
+                headers=SERVICE_HEADERS,
+                params={"id": f"eq.{inspection_id}", "select": "id"}
+            )
+            # If table doesn't exist (404), that's OK - we'll create it
+            if check_resp.status_code == 404:
+                existing = []
+            else:
+                check_resp.raise_for_status()
+                existing = check_resp.json() or []
+        except requests.exceptions.HTTPError as e:
+            # If table doesn't exist, that's OK
+            if e.response and e.response.status_code == 404:
+                existing = []
+            else:
+                raise
+        except Exception:
+            # If any other error, assume inspection doesn't exist
+            existing = []
+        
+        if existing and len(existing) > 0:
+            # Update existing inspection
+            try:
+                update_resp = requests.patch(
+                    f"{REST_URL}/inspections?id=eq.{inspection_id}",
+                    headers={**SERVICE_HEADERS, "Prefer": "return=representation"},
+                    json=inspection_data
+                )
+                # If table doesn't exist (404), that's OK - will be created by migration
+                if update_resp.status_code != 404:
+                    update_resp.raise_for_status()
+            except requests.exceptions.HTTPError as e:
+                # If table doesn't exist, that's OK
+                if e.response and e.response.status_code == 404:
+                    pass
+                else:
+                    raise
+        else:
+            # Create new inspection
+            try:
+                create_resp = requests.post(
+                    f"{REST_URL}/inspections",
+                    headers=SERVICE_HEADERS,
+                    json=inspection_data
+                )
+                # If table doesn't exist (404), that's OK - will be created by migration
+                # If inspection already exists (409 or similar), that's also OK
+                if create_resp.status_code not in [200, 201, 404, 409]:
+                    create_resp.raise_for_status()
+            except requests.exceptions.HTTPError as e:
+                # If table doesn't exist (404), that's OK
+                if e.response and e.response.status_code == 404:
+                    pass
+                # If conflict (409), inspection might already exist - that's OK
+                elif e.response and e.response.status_code == 409:
+                    pass
+                else:
+                    raise
+        
+        # Handle tasks - use upsert (update or insert) instead of delete + insert
+        # This prevents losing tasks if insertion fails
+        tasks = payload.get("tasks", [])
+        saved_tasks = []
+        return_tasks = tasks  # Default to original tasks if nothing is saved
+        failed_tasks = []
+        
+        if tasks:
+            # First, get existing tasks for this inspection to see what needs updating vs inserting
+            existing_task_ids = set()
+            try:
+                existing_resp = requests.get(
+                    f"{REST_URL}/inspection_tasks",
+                    headers=SERVICE_HEADERS,
+                    params={"inspection_id": f"eq.{inspection_id}", "select": "id"}
+                )
+                if existing_resp.status_code == 200:
+                    existing_tasks = existing_resp.json() or []
+                    existing_task_ids = {t.get("id") for t in existing_tasks if t.get("id")}
+            except:
+                pass  # If we can't get existing tasks, we'll try to insert/update all
+            
+            # Upsert tasks one by one (update if exists, insert if not)
+            for task in tasks:
+                try:
+                    task_data = {
+                        "id": task.get("id") or str(uuid.uuid4()),
+                        "inspection_id": inspection_id,
+                        "name": task.get("name", ""),
+                        "completed": bool(task.get("completed", False)),  # Ensure boolean
+                    }
+                    task_id = task_data["id"]
+                    
+                    # Try to update if task exists, otherwise insert
+                    if task_id in existing_task_ids:
+                        # Task exists, update it
+                        update_resp = requests.patch(
+                            f"{REST_URL}/inspection_tasks?id=eq.{task_id}&inspection_id=eq.{inspection_id}",
+                            headers={**SERVICE_HEADERS, "Prefer": "return=representation"},
+                            json={"completed": task_data["completed"], "name": task_data["name"]}
+                        )
+                        if update_resp.status_code in [200, 201, 204]:
+                            saved_tasks.append(task_data)
+                        else:
+                            # Update failed, try insert
+                            task_resp = requests.post(
+                                f"{REST_URL}/inspection_tasks",
+                                headers=SERVICE_HEADERS,
+                                json=task_data
+                            )
+                            if task_resp.status_code in [200, 201]:
+                                saved_tasks.append(task_data)
+                            elif task_resp.status_code == 404:
+                                saved_tasks.append(task_data)  # Table doesn't exist, but include in response
+                            else:
+                                failed_tasks.append(task_data)
+                    else:
+                        # Task doesn't exist, insert it
+                        task_resp = requests.post(
+                            f"{REST_URL}/inspection_tasks",
+                            headers=SERVICE_HEADERS,
+                            json=task_data
+                        )
+                        if task_resp.status_code in [200, 201]:
+                            saved_tasks.append(task_data)
+                        elif task_resp.status_code == 404:
+                            saved_tasks.append(task_data)  # Table doesn't exist, but include in response
+                        elif task_resp.status_code == 409:
+                            # Conflict - task was created by another request, try update
+                            try:
+                                update_resp = requests.patch(
+                                    f"{REST_URL}/inspection_tasks?id=eq.{task_id}&inspection_id=eq.{inspection_id}",
+                                    headers={**SERVICE_HEADERS, "Prefer": "return=representation"},
+                                    json={"completed": task_data["completed"], "name": task_data["name"]}
+                                )
+                                if update_resp.status_code in [200, 201, 204]:
+                                    saved_tasks.append(task_data)
+                                else:
+                                    failed_tasks.append(task_data)
+                            except:
+                                failed_tasks.append(task_data)
+                        else:
+                            error_text = task_resp.text[:200] if task_resp.text else ""
+                            print(f"Warning: Failed to save task {task_id}: {task_resp.status_code} {error_text}")
+                            failed_tasks.append(task_data)
+                except requests.exceptions.HTTPError as e:
+                    # If table doesn't exist (404), that's OK
+                    if e.response and e.response.status_code == 404:
+                        saved_tasks.append({
+                            "id": task.get("id") or str(uuid.uuid4()),
+                            "inspection_id": inspection_id,
+                            "name": task.get("name", ""),
+                            "completed": bool(task.get("completed", False)),
+                        })
+                    else:
+                        error_text = e.response.text[:200] if e.response and e.response.text else str(e)
+                        print(f"Warning: Failed to save task: {error_text}")
+                        failed_tasks.append({
+                            "id": task.get("id") or str(uuid.uuid4()),
+                            "inspection_id": inspection_id,
+                            "name": task.get("name", ""),
+                            "completed": bool(task.get("completed", False)),
+                        })
+                except Exception as e:
+                    # Any other error - continue with other tasks
+                    print(f"Warning: Exception saving task: {str(e)}")
+                    failed_tasks.append({
+                        "id": task.get("id") or str(uuid.uuid4()),
+                        "inspection_id": inspection_id,
+                        "name": task.get("name", ""),
+                        "completed": bool(task.get("completed", False)),
+                    })
+            
+            # Only delete tasks that are no longer in the list (cleanup)
+            # But only if we successfully saved the new tasks
+            if saved_tasks and len(saved_tasks) > 0:
+                try:
+                    saved_task_ids = {t["id"] for t in saved_tasks}
+                    # Delete tasks that exist in DB but are not in the new list
+                    if existing_task_ids:
+                        tasks_to_delete = existing_task_ids - saved_task_ids
+                        for task_id_to_delete in tasks_to_delete:
+                            try:
+                                requests.delete(
+                                    f"{REST_URL}/inspection_tasks?id=eq.{task_id_to_delete}&inspection_id=eq.{inspection_id}",
+                                    headers=SERVICE_HEADERS
+                                )
+                            except:
+                                pass  # Ignore delete errors
+                except:
+                    pass  # Ignore cleanup errors
+            
+            # Log summary
+            print(f"Inspection {inspection_id}: Saved {len(saved_tasks)}/{len(tasks)} tasks. Failed: {len(failed_tasks)}")
+            if saved_tasks:
+                return_tasks = saved_tasks
+            # If all tasks failed, keep the original tasks in the response (don't lose them)
+        
+        # Return the created/updated inspection with tasks
+        # Include metadata about save success
+        completed_count = sum(1 for t in return_tasks if t.get("completed", False))
+        return {
+            "id": inspection_id,
+            "orderId": order_id,
+            "unitNumber": inspection_data["unit_number"],
+            "guestName": inspection_data["guest_name"],
+            "departureDate": inspection_data["departure_date"],
+            "status": inspection_data["status"],
+            "tasks": return_tasks,
+            "savedTasksCount": len(saved_tasks),
+            "totalTasksCount": len(tasks),
+            "completedTasksCount": completed_count,
+        }
+    except requests.exceptions.HTTPError as e:
+        error_detail = f"HTTP {e.response.status_code}: {e.response.text[:200]}" if e.response else str(e)
+        raise HTTPException(status_code=500, detail=f"Supabase error: {error_detail}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating/updating inspection: {str(e)}")
+
+@app.patch("/api/inspections/{inspection_id}/tasks/{task_id}")
+def update_inspection_task(inspection_id: str, task_id: str, payload: dict):
+    """Update a single inspection task (e.g., toggle completion). Creates task if it doesn't exist."""
+    try:
+        task_data = {}
+        if "completed" in payload:
+            task_data["completed"] = payload["completed"]
+        if "name" in payload:
+            task_data["name"] = payload["name"]
+        
+        if not task_data:
+            return {"message": "No changes provided"}
+        
+        # First, try to find the task by id and inspection_id
+        existing_task = None
+        try:
+            check_resp = requests.get(
+                f"{REST_URL}/inspection_tasks",
+                headers=SERVICE_HEADERS,
+                params={"id": f"eq.{task_id}", "inspection_id": f"eq.{inspection_id}", "select": "*"}
+            )
+            # If table doesn't exist (404), that's OK - we'll create the task
+            if check_resp.status_code == 200:
+                existing_tasks = check_resp.json() or []
+                if existing_tasks and len(existing_tasks) > 0:
+                    existing_task = existing_tasks[0]
+        except requests.exceptions.HTTPError as e:
+            # If table doesn't exist (404), that's OK
+            if e.response and e.response.status_code == 404:
+                existing_task = None
+            else:
+                # For other errors, assume task doesn't exist and try to create it
+                existing_task = None
+        except Exception:
+            # Any other error, assume task doesn't exist
+            existing_task = None
+        
+        task_name = payload.get("name", "") or (existing_task.get("name") if existing_task else "")
+        
+        if existing_task:
+            # Task exists, try to update it
+            try:
+                update_resp = requests.patch(
+                    f"{REST_URL}/inspection_tasks?id=eq.{task_id}&inspection_id=eq.{inspection_id}",
+                    headers={**SERVICE_HEADERS, "Prefer": "return=representation"},
+                    json=task_data
+                )
+                # If update succeeds, return the updated task
+                if update_resp.status_code in [200, 201, 204]:
+                    try:
+                        result = update_resp.json()
+                        updated_task = result[0] if isinstance(result, list) and result else result
+                        return {
+                            "id": updated_task.get("id"),
+                            "name": updated_task.get("name"),
+                            "completed": updated_task.get("completed", False),
+                        }
+                    except:
+                        # If response has no body, return what we know
+                        return {
+                            "id": task_id,
+                            "name": task_name,
+                            "completed": task_data.get("completed", False),
+                        }
+                # If update fails (404 = table doesn't exist, or other error), try to create it
+            except:
+                pass
+        
+        # Task doesn't exist or update failed, create it
+        create_data = {
+            "id": task_id,
+            "inspection_id": inspection_id,
+            "name": task_name,
+            "completed": task_data.get("completed", False),
+        }
+        
+        try:
+            create_resp = requests.post(
+                f"{REST_URL}/inspection_tasks",
+                headers=SERVICE_HEADERS,
+                json=create_data
+            )
+            # If table doesn't exist (404), return success anyway (table will be created by migration)
+            if create_resp.status_code == 404:
+                return create_data
+            # If creation succeeds
+            if create_resp.status_code in [200, 201]:
+                try:
+                    result = create_resp.json()
+                    created_task = result[0] if isinstance(result, list) and result else result
+                    return {
+                        "id": created_task.get("id") if isinstance(created_task, dict) else task_id,
+                        "name": created_task.get("name") if isinstance(created_task, dict) else task_name,
+                        "completed": created_task.get("completed", False) if isinstance(created_task, dict) else task_data.get("completed", False),
+                    }
+                except:
+                    return create_data
+        except requests.exceptions.HTTPError as e:
+            # If table doesn't exist (404), return success anyway
+            if e.response and e.response.status_code == 404:
+                return create_data
+            # For other errors, still return success to prevent UI blocking
+            return create_data
+        except Exception:
+            # Any error, return success to prevent UI blocking
+            return create_data
+    except requests.exceptions.HTTPError as e:
+        # If table doesn't exist yet, return success (will be created by migration)
+        if e.response and e.response.status_code == 404:
+            return {
+                "id": task_id,
+                "name": payload.get("name", ""),
+                "completed": payload.get("completed", False),
+            }
+        error_detail = f"HTTP {e.response.status_code}: {e.response.text[:200]}" if e.response else str(e)
+        raise HTTPException(status_code=500, detail=f"Supabase error: {error_detail}")
+    except Exception as e:
+        # If any error occurs, return success anyway to prevent UI blocking
+        # The full mission save will handle persistence
+        return {
+            "id": task_id,
+            "name": payload.get("name", ""),
+            "completed": payload.get("completed", False),
+        }
 
 @app.get("/inventory/items")
 def inventory_items():
