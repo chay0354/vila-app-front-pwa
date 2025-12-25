@@ -497,7 +497,7 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
   return (
     <div className="exit-inspections-container">
       <div className="exit-inspections-header">
-        <button className="exit-inspections-back-button" onClick={() => navigate('/inspections')}>
+        <button className="exit-inspections-back-button" onClick={() => navigate('/hub')}>
           ← חזרה
         </button>
       </div>

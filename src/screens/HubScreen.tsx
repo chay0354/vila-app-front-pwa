@@ -153,7 +153,7 @@ function HubScreen({ userName }: HubScreenProps) {
               'סטטוסים: צריך ביקורת / בביצוע / הושלם',
             ]}
             cta="פתח ביקורות"
-            onPress={() => navigate('/inspections')}
+            onPress={() => navigate('/exit-inspections')}
           />
           <OptionCard
             title="מחסן"
