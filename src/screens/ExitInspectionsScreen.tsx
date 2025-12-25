@@ -167,8 +167,13 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
     }
     
     setInspectionMissions(prev => {
-      const prevByOrderId = new Map<string, InspectionMission>()
-      prev.forEach(m => prevByOrderId.set(m.orderId, m))
+      // Map by inspection ID (INSP- prefix) to only find exit inspections
+      const prevByInspectionId = new Map<string, InspectionMission>()
+      prev.forEach(m => {
+        if (m.id.startsWith('INSP-')) {
+          prevByInspectionId.set(m.id, m)
+        }
+      })
 
       const next: InspectionMission[] = []
       const newMissions: InspectionMission[] = []
@@ -176,7 +181,8 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
       orders
         .filter(o => o.status !== 'בוטל')
         .forEach(o => {
-          const existing = prevByOrderId.get(o.id)
+          const inspectionId = `INSP-${o.id}`
+          const existing = prevByInspectionId.get(inspectionId)
           const isNew = !existing
           
           // Ensure tasks are always populated with all default tasks
