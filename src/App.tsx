@@ -8,6 +8,8 @@ import HubScreen from './screens/HubScreen'
 import OrdersScreen from './screens/OrdersScreen'
 import OrderEditScreen from './screens/OrderEditScreen'
 import ExitInspectionsScreen from './screens/ExitInspectionsScreen'
+import CleaningInspectionsScreen from './screens/CleaningInspectionsScreen'
+import InspectionsMenuScreen from './screens/InspectionsMenuScreen'
 import MaintenanceScreen from './screens/MaintenanceScreen'
 import MaintenanceTasksScreen from './screens/MaintenanceTasksScreen'
 import MaintenanceTaskDetailScreen from './screens/MaintenanceTaskDetailScreen'
@@ -231,10 +233,30 @@ function App() {
           } 
         />
         <Route 
+          path="/inspections" 
+          element={
+            userName ? (
+              <InspectionsMenuScreen userName={userName} />
+            ) : (
+              <Navigate to="/signin" replace />
+            )
+          } 
+        />
+        <Route 
           path="/exit-inspections" 
           element={
             userName ? (
               <ExitInspectionsScreen userName={userName} />
+            ) : (
+              <Navigate to="/signin" replace />
+            )
+          } 
+        />
+        <Route 
+          path="/cleaning-inspections" 
+          element={
+            userName ? (
+              <CleaningInspectionsScreen userName={userName} />
             ) : (
               <Navigate to="/signin" replace />
             )

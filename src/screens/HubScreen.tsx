@@ -114,7 +114,7 @@ function HubScreen({ userName }: HubScreenProps) {
             </button>
             <button
               className="hub-quick-action-btn hub-quick-action-green"
-              onClick={() => navigate('/exit-inspections')}
+              onClick={() => navigate('/inspections')}
               type="button"
             >
               <span className="hub-quick-action-icon">🧹</span>
@@ -153,7 +153,7 @@ function HubScreen({ userName }: HubScreenProps) {
               'סטטוסים: צריך ביקורת / בביצוע / הושלם',
             ]}
             cta="פתח ביקורות"
-            onPress={() => navigate('/exit-inspections')}
+            onPress={() => navigate('/inspections')}
           />
           <OptionCard
             title="מחסן"
