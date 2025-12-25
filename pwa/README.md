@@ -14,7 +14,7 @@ npm install
 
 Create a `.env` file in the root directory to configure the API URL:
 
-```bash
+```env
 # Production API
 API_BASE_URL=https://vila-app-back.vercel.app
 
@@ -47,20 +47,41 @@ npm run build
 npm run preview
 ```
 
+## Vercel Deployment
+
+This project is configured for Vercel deployment. The `vercel.json` file specifies:
+- Build Command: `npm run build`
+- Output Directory: `dist`
+
+**Important:** Make sure in Vercel Project Settings:
+- Root Directory is set to `.` (current directory) or left empty
+- Framework is detected as "Vite"
+- Build Command override is enabled with `npm run build`
+
 ## Features
 
-- Sign In / Sign Up screens (matching front-native logic)
-- Home screen with stats and navigation
-- Responsive design
-- PWA support (installable, offline capable)
-- RTL (Right-to-Left) support for Hebrew
-- Environment-based API configuration
+* Sign In / Sign Up screens (matching front-native logic)
+* Home screen with stats and navigation
+* Hub screen with quick actions and option cards
+* Orders management (create, edit, view)
+* Exit inspections
+* Maintenance tasks
+* Warehouse management
+* Reports
+* Invoices
+* Chat
+* Attendance clock
+* Cleaning schedule
+* Push notifications for new tasks and messages
+* Responsive design
+* PWA support (installable, offline capable)
+* RTL (Right-to-Left) support for Hebrew
+* Environment-based API configuration
 
 ## Tech Stack
 
-- React 18
-- TypeScript
-- Vite
-- React Router
-- PWA Plugin
-
+* React 18
+* TypeScript
+* Vite
+* React Router
+* Vite PWA Plugin
