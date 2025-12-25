@@ -1,0 +1,253 @@
+.hub-container {
+  min-height: 100vh;
+  background-color: #f3f6fb;
+  display: flex;
+  flex-direction: column;
+}
+
+.hub-scroll {
+  padding: 18px;
+  padding-bottom: 50px;
+}
+
+.hub-top-row {
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.hub-brand-badge {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  background-color: #e0f2fe;
+  padding: 8px 12px;
+  border-radius: 16px;
+  border: 1px solid #bae6fd;
+  gap: 8px;
+}
+
+.hub-brand-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 8px;
+  background-color: #38bdf8;
+}
+
+.hub-brand-text {
+  color: #0f172a;
+  font-weight: 800;
+  font-size: 16px;
+}
+
+.hub-user-chip {
+  background-color: #e0f2fe;
+  padding: 8px 14px;
+  border-radius: 18px;
+  border: 1px solid #bae6fd;
+}
+
+.hub-user-chip-text {
+  color: #0f172a;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.hub-stats-grid {
+  display: flex;
+  flex-direction: row-reverse;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.hub-stat-card {
+  width: 32%;
+  min-width: 100px;
+  border-radius: 14px;
+  padding: 12px;
+  border: 2px solid;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
+}
+
+.hub-stat-card-blue {
+  background-color: #dbeafe;
+  border-color: #3b82f6;
+}
+
+.hub-stat-card-green {
+  background-color: #dcfce7;
+  border-color: #22c55e;
+}
+
+.hub-stat-card-red {
+  background-color: #fee2e2;
+  border-color: #ef4444;
+}
+
+.hub-stat-value {
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+  text-align: center;
+}
+
+.hub-stat-label {
+  font-size: 11px;
+  color: #475569;
+  text-align: center;
+  margin-top: 4px;
+  font-weight: 600;
+}
+
+.hub-progress-section {
+  margin-top: 24px;
+}
+
+.hub-section-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+  text-align: right;
+  margin-bottom: 12px;
+  margin-top: 0;
+}
+
+.hub-progress-card {
+  background-color: #fff;
+  border-radius: 16px;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.06);
+}
+
+.hub-progress-info {
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.hub-progress-label {
+  font-size: 14px;
+  color: #475569;
+  font-weight: 600;
+}
+
+.hub-progress-percent {
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.hub-progress-bar-large {
+  width: 100%;
+  height: 12px;
+  background-color: #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.hub-progress-fill-large {
+  height: 100%;
+  background-color: #2563eb;
+  border-radius: 8px;
+  transition: width 0.3s ease;
+}
+
+.hub-progress-note {
+  font-size: 12px;
+  color: #64748b;
+  text-align: right;
+}
+
+.hub-quick-actions {
+  margin-top: 24px;
+}
+
+.hub-quick-actions-row {
+  display: flex;
+  flex-direction: row-reverse;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.hub-quick-action-btn {
+  width: calc(50% - 6px);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
+  box-sizing: border-box;
+}
+
+.hub-quick-action-btn:hover {
+  opacity: 0.9;
+  transform: translateY(1px);
+}
+
+.hub-quick-action-btn:active {
+  transform: translateY(2px);
+}
+
+.hub-quick-action-blue {
+  background-color: #3b82f6;
+}
+
+.hub-quick-action-green {
+  background-color: #22c55e;
+}
+
+.hub-quick-action-orange {
+  background-color: #f59e0b;
+}
+
+.hub-quick-action-icon {
+  font-size: 28px;
+  margin-bottom: 6px;
+}
+
+.hub-quick-action-text {
+  color: #fff;
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.hub-option-grid {
+  display: flex;
+  flex-direction: row-reverse;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .hub-stats-grid {
+    flex-direction: column;
+  }
+
+  .hub-stat-card {
+    width: 100%;
+  }
+
+  .hub-quick-actions-row {
+    flex-direction: column;
+  }
+
+  .hub-quick-action-btn {
+    width: 100%;
+  }
+}
+

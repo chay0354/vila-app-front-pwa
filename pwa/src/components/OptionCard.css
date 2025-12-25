@@ -1,0 +1,101 @@
+.option-card {
+  width: calc(50% - 6px);
+  min-width: 160px;
+  border-radius: 16px;
+  padding: 14px;
+  border: 1px solid;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+  transition: transform 0.1s, opacity 0.1s;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.06);
+  background-color: rgba(255, 255, 255, 0.9);
+  text-align: right;
+  box-sizing: border-box;
+}
+
+.option-card:hover:not(:disabled) {
+  transform: translateY(1px);
+  opacity: 0.96;
+}
+
+.option-card:active:not(:disabled) {
+  transform: translateY(2px);
+}
+
+.option-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.option-icon-wrap {
+  align-self: flex-start;
+  padding: 10px;
+  border-radius: 12px;
+}
+
+.option-icon {
+  font-size: 22px;
+  display: block;
+}
+
+.option-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+  text-align: right;
+  margin: 0;
+  margin-top: 2px;
+}
+
+.option-bullets {
+  gap: 4px;
+  margin-top: 2px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.option-bullet {
+  font-size: 13.5px;
+  color: #475569;
+  text-align: right;
+  line-height: 19px;
+}
+
+.option-cta {
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  text-align: center;
+}
+
+.option-cta-text {
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.option-status {
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 10px;
+  text-align: center;
+  background-color: #f1f5f9;
+  border: 1px solid #e2e8f0;
+}
+
+.option-status-text {
+  color: #64748b;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .option-card {
+    width: 100%;
+  }
+}
+

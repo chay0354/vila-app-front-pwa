@@ -1,0 +1,125 @@
+.new-warehouse-container {
+  min-height: 100vh;
+  background-color: #f6f7fb;
+  display: flex;
+  flex-direction: column;
+}
+
+.new-warehouse-header {
+  display: flex;
+  flex-direction: row-reverse;
+  padding: 18px;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 18px);
+  padding-bottom: 4px;
+}
+
+.new-warehouse-back-button {
+  padding: 8px 12px;
+  border-radius: 10px;
+  background-color: #e2e8f0;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.new-warehouse-back-button:hover {
+  opacity: 0.9;
+}
+
+.new-warehouse-scroll {
+  padding: 18px;
+  padding-bottom: 40px;
+}
+
+.new-warehouse-title-section {
+  margin-bottom: 24px;
+}
+
+.new-warehouse-title {
+  font-size: 28px;
+  font-weight: 800;
+  color: #0f172a;
+  text-align: right;
+  margin: 0 0 8px 0;
+}
+
+.new-warehouse-subtitle {
+  font-size: 16px;
+  color: #64748b;
+  text-align: right;
+  margin: 0;
+}
+
+.new-warehouse-form-section {
+  background-color: #fff;
+  border-radius: 16px;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  margin-bottom: 24px;
+}
+
+.new-warehouse-form-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  text-align: right;
+  margin-bottom: 8px;
+}
+
+.new-warehouse-form-input {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  font-size: 15px;
+  margin-bottom: 16px;
+  text-align: right;
+  box-sizing: border-box;
+}
+
+.new-warehouse-form-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.new-warehouse-form-actions {
+  display: flex;
+  flex-direction: row-reverse;
+  gap: 12px;
+}
+
+.new-warehouse-form-button {
+  flex: 1;
+  padding: 12px 24px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  border: none;
+}
+
+.new-warehouse-form-button-primary {
+  background-color: #3b82f6;
+  color: #fff;
+}
+
+.new-warehouse-form-button-primary:hover {
+  opacity: 0.9;
+}
+
+.new-warehouse-form-button-secondary {
+  background-color: #e2e8f0;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+}
+
+.new-warehouse-form-button-secondary:hover {
+  opacity: 0.9;
+}
+

@@ -1,0 +1,214 @@
+.warehouse-inventory-detail-container {
+  min-height: 100vh;
+  background-color: #f6f7fb;
+  display: flex;
+  flex-direction: column;
+}
+
+.warehouse-inventory-detail-header {
+  display: flex;
+  flex-direction: row-reverse;
+  padding: 18px;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 18px);
+  padding-bottom: 4px;
+}
+
+.warehouse-inventory-detail-back-button {
+  padding: 8px 12px;
+  border-radius: 10px;
+  background-color: #e2e8f0;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.warehouse-inventory-detail-back-button:hover {
+  opacity: 0.9;
+}
+
+.warehouse-inventory-detail-scroll {
+  padding: 18px;
+  padding-bottom: 40px;
+}
+
+.warehouse-inventory-detail-title-section {
+  margin-bottom: 24px;
+}
+
+.warehouse-inventory-detail-title {
+  font-size: 28px;
+  font-weight: 800;
+  color: #0f172a;
+  text-align: right;
+  margin: 0 0 8px 0;
+}
+
+.warehouse-inventory-detail-subtitle {
+  font-size: 16px;
+  color: #64748b;
+  text-align: right;
+  margin: 0;
+}
+
+.warehouse-inventory-detail-actions-row {
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.warehouse-inventory-detail-section-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  text-align: right;
+}
+
+.warehouse-inventory-detail-add-button {
+  padding: 10px 16px;
+  border-radius: 10px;
+  background-color: #3b82f6;
+  border: none;
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.warehouse-inventory-detail-add-button:hover {
+  opacity: 0.9;
+}
+
+.warehouse-inventory-detail-empty-state {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.warehouse-inventory-detail-empty-state-text {
+  font-size: 16px;
+  color: #64748b;
+  margin: 0 0 8px 0;
+}
+
+.warehouse-inventory-detail-empty-state-subtext {
+  font-size: 14px;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.warehouse-inventory-detail-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.warehouse-inventory-detail-item-card {
+  background-color: #fff;
+  border-radius: 16px;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.warehouse-inventory-detail-item-info {
+  margin-bottom: 12px;
+}
+
+.warehouse-inventory-detail-item-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 4px 0;
+  text-align: right;
+}
+
+.warehouse-inventory-detail-item-unit {
+  font-size: 14px;
+  color: #64748b;
+  margin: 0;
+  text-align: right;
+}
+
+.warehouse-inventory-detail-item-edit {
+  display: flex;
+  flex-direction: row-reverse;
+  gap: 8px;
+  align-items: center;
+}
+
+.warehouse-inventory-detail-item-quantity-input {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 14px;
+  text-align: right;
+}
+
+.warehouse-inventory-detail-item-save-button {
+  padding: 8px 16px;
+  border-radius: 8px;
+  background-color: #22c55e;
+  border: none;
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.warehouse-inventory-detail-item-save-button:hover {
+  opacity: 0.9;
+}
+
+.warehouse-inventory-detail-item-cancel-button {
+  padding: 8px 16px;
+  border-radius: 8px;
+  background-color: #e2e8f0;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.warehouse-inventory-detail-item-cancel-button:hover {
+  opacity: 0.9;
+}
+
+.warehouse-inventory-detail-item-actions {
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.warehouse-inventory-detail-item-quantity {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.warehouse-inventory-detail-item-edit-button {
+  padding: 8px 16px;
+  border-radius: 8px;
+  background-color: #3b82f6;
+  border: none;
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.warehouse-inventory-detail-item-edit-button:hover {
+  opacity: 0.9;
+}
+

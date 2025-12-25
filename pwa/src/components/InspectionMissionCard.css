@@ -1,0 +1,175 @@
+.inspection-mission-card {
+  background-color: #f0f9ff;
+  border: 1px solid #e0f2fe;
+  border-radius: 16px;
+  padding: 18px;
+  margin-top: 12px;
+  cursor: pointer;
+  transition: opacity 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(14, 165, 233, 0.08);
+}
+
+.inspection-mission-card:hover {
+  opacity: 0.95;
+}
+
+.inspection-mission-card.expanded {
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.12);
+}
+
+.inspection-mission-header {
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0;
+}
+
+.inspection-mission-header-content {
+  flex: 1;
+}
+
+.inspection-mission-card-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+  text-align: right;
+  margin: 0;
+  margin-bottom: 6px;
+}
+
+.inspection-mission-card-line {
+  font-size: 14px;
+  color: #475569;
+  text-align: right;
+  margin: 4px 0;
+}
+
+.inspection-mission-status-row {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.inspection-mission-status-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.inspection-mission-status-badge {
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.inspection-mission-divider {
+  height: 1px;
+  background-color: #e2e8f0;
+  margin: 12px 0;
+}
+
+.inspection-mission-progress-wrap {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.inspection-mission-progress-header {
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: space-between;
+}
+
+.inspection-mission-progress-label {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.inspection-mission-progress-value {
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.inspection-mission-progress-bar {
+  height: 10px;
+  background-color: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.inspection-mission-progress-fill {
+  height: 100%;
+  background-color: #2563eb;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.inspection-mission-tasks-list {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inspection-mission-tasks-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  text-align: right;
+  margin-bottom: 8px;
+  margin-top: 0;
+}
+
+.inspection-mission-task-item {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  cursor: pointer;
+}
+
+.inspection-mission-task-checkbox {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 2px solid #cbd5e1;
+  background-color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.inspection-mission-task-checkbox.completed {
+  background-color: #22c55e;
+  border-color: #22c55e;
+}
+
+.inspection-mission-task-checkmark {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.inspection-mission-task-text {
+  font-size: 14px;
+  color: #334155;
+  text-align: right;
+  flex: 1;
+}
+
+.inspection-mission-task-text.completed {
+  text-decoration: line-through;
+  color: #94a3b8;
+}
+

@@ -1,0 +1,121 @@
+.warehouse-menu-container {
+  min-height: 100vh;
+  background-color: #f6f7fb;
+  display: flex;
+  flex-direction: column;
+}
+
+.warehouse-menu-header {
+  display: flex;
+  flex-direction: row-reverse;
+  padding: 18px;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 18px);
+  padding-bottom: 4px;
+}
+
+.warehouse-menu-back-button {
+  padding: 8px 12px;
+  border-radius: 10px;
+  background-color: #e2e8f0;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.warehouse-menu-back-button:hover {
+  opacity: 0.9;
+}
+
+.warehouse-menu-scroll {
+  padding: 18px;
+  padding-bottom: 40px;
+}
+
+.warehouse-menu-title-section {
+  margin-bottom: 24px;
+}
+
+.warehouse-menu-title {
+  font-size: 28px;
+  font-weight: 800;
+  color: #0f172a;
+  text-align: right;
+  margin: 0 0 8px 0;
+}
+
+.warehouse-menu-subtitle {
+  font-size: 16px;
+  color: #64748b;
+  text-align: right;
+  margin: 0;
+}
+
+.warehouse-menu-options {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.warehouse-menu-option {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  background-color: #fff;
+  border-radius: 16px;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: right;
+}
+
+.warehouse-menu-option:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.warehouse-menu-option-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  background-color: #f1f5f9;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-left: 16px;
+}
+
+.warehouse-menu-option-icon-text {
+  font-size: 28px;
+}
+
+.warehouse-menu-option-content {
+  flex: 1;
+}
+
+.warehouse-menu-option-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 4px 0;
+  text-align: right;
+}
+
+.warehouse-menu-option-subtitle {
+  font-size: 14px;
+  color: #64748b;
+  margin: 0;
+  text-align: right;
+}
+
+.warehouse-menu-option-arrow {
+  font-size: 24px;
+  color: #94a3b8;
+  margin-right: 8px;
+}
+
