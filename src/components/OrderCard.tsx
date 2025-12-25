@@ -1,4 +1,4 @@
-import { Order, OrderStatus } from '../types/orders'
+import { Order } from '../types/orders'
 import './OrderCard.css'
 
 type OrderCardProps = {

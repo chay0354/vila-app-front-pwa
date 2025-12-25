@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { API_BASE_URL } from '../apiConfig'
 import { Order } from '../types/orders'
-import { InspectionMission, defaultInspectionTasks } from '../types/inspections'
+import { InspectionMission, InspectionTask, defaultInspectionTasks } from '../types/inspections'
 import { computeInspectionStatus } from '../utils/inspectionUtils'
 import InspectionMissionCard from '../components/InspectionMissionCard'
 import './ExitInspectionsScreen.css'
@@ -45,7 +45,7 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
           }))
           
         console.log('Loaded inspection:', insp.id, 'with', backendTasks.length, 'tasks from backend')
-        console.log('Backend tasks:', backendTasks.map(t => ({ id: t.id, name: t.name, completed: t.completed })))
+        console.log('Backend tasks:', backendTasks.map((t: any) => ({ id: t.id, name: t.name, completed: t.completed })))
           
           // If no tasks from backend, use default tasks
           // Otherwise, merge backend tasks with default tasks to ensure all tasks are present
@@ -56,12 +56,12 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
           } else {
             // Merge: use backend tasks for completion status, but ensure all default tasks are present
             // Match by ID first, then by name as fallback (in case IDs don't match)
-            const tasksMapById = new Map(backendTasks.map(t => [String(t.id), t]))
-            const tasksMapByName = new Map(backendTasks.map(t => [String(t.name).trim().toLowerCase(), t]))
+            const tasksMapById = new Map(backendTasks.map((t: any) => [String(t.id), t]))
+            const tasksMapByName = new Map(backendTasks.map((t: any) => [String(t.name).trim().toLowerCase(), t]))
             
             tasks = defaultInspectionTasks.map(defaultTask => {
               // Try to find by ID first
-              let backendTask = tasksMapById.get(String(defaultTask.id))
+              let backendTask: any = tasksMapById.get(String(defaultTask.id))
               
               // If not found by ID, try to find by name (case-insensitive, trimmed)
               if (!backendTask) {
@@ -329,36 +329,6 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
     }
   }
 
-  const handleUpdateMission = async (id: string, updates: Partial<InspectionMission>) => {
-    const mission = inspectionMissions.find(m => m.id === id)
-    if (!mission) return
-
-    // Update local state immediately for responsive UI
-    setInspectionMissions(prev =>
-      prev.map(m => (m.id === id ? { ...m, ...updates } : m))
-    )
-
-    // Save to backend
-    try {
-      const updatedMission = { ...mission, ...updates }
-      await fetch(`${API_BASE_URL}/api/inspections`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: updatedMission.id,
-          orderId: updatedMission.orderId,
-          unitNumber: updatedMission.unitNumber,
-          guestName: updatedMission.guestName,
-          departureDate: updatedMission.departureDate,
-          status: updatedMission.status,
-          tasks: updatedMission.tasks,
-        }),
-      })
-    } catch (err) {
-      console.error('Error saving inspection to backend:', err)
-      // Revert on error? Or just log and continue?
-    }
-  }
 
   const handleToggleTask = async (missionId: string, taskId: string) => {
     console.log('=== TASK TOGGLED ===', missionId, taskId)
@@ -491,7 +461,7 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
           completed: Boolean(t.completed),
         }))
         
-        console.log('Updating local state with saved tasks:', savedTasks.map(t => ({ id: t.id, completed: t.completed })))
+        console.log('Updating local state with saved tasks:', savedTasks.map((t: any) => ({ id: t.id, completed: t.completed })))
         
         // CRITICAL: Reload inspections from backend to ensure we have the latest data for ALL inspections
         // This fixes the issue where the second inspection doesn't persist after refresh
