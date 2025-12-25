@@ -1,21 +1,15 @@
 // Base API URL for the backend.
-// Uses react-native-config to read from .env file
-const DEFAULT_API_URL = 'https://vila-app-back.vercel.app';
+// Must be set via API_BASE_URL environment variable
+// @ts-ignore - Vite injects this at build time
+const apiUrl = import.meta.env.API_BASE_URL;
 
-let apiUrl = DEFAULT_API_URL;
-
-try {
-  // Try to import react-native-config
-  const Config = require('react-native-config').default || require('react-native-config');
-  if (Config && Config.API_BASE_URL) {
-    apiUrl = Config.API_BASE_URL;
-  }
-} catch (e) {
-  // If react-native-config is not available, use default
-  console.warn('react-native-config not available, using default API URL');
+if (!apiUrl || apiUrl.trim() === '') {
+  console.error('ERROR: API_BASE_URL environment variable is required. Please set it in your .env file.');
+  console.error('Example: API_BASE_URL=https://vila-app-back.vercel.app');
+  throw new Error('API_BASE_URL environment variable is required. Please set it in your .env file.');
 }
 
 // Remove all trailing slashes - endpoints already start with /
-apiUrl = String(apiUrl).trim().replace(/\/+$/, '');
-export const API_BASE_URL = apiUrl;
+const cleanUrl = String(apiUrl).trim().replace(/\/+$/, '');
+export const API_BASE_URL = cleanUrl;
 

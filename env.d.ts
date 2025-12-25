@@ -1,5 +1,10 @@
-declare module '@env' {
-  export const API_BASE_URL: string;
+/// <reference types="vite/client" />
+
+interface ImportMetaEnv {
+  readonly API_BASE_URL: string
 }
 
+interface ImportMeta {
+  readonly env: ImportMetaEnv
+}
 
