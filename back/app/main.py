@@ -367,6 +367,7 @@ def inspections():
             
             # Group tasks by inspection_id
             print(f"Loaded {len(all_tasks)} tasks from database")
+            print(f"Tasks for inspections: {inspection_ids}")
             for task in all_tasks:
                 insp_id = task.get("inspection_id")
                 if insp_id:
@@ -386,8 +387,14 @@ def inspections():
                         "name": task.get("name"),
                         "completed": completed,
                     }
-                    print(f"Task {task_data['id']} ({task_data['name']}): completed={completed} (type: {type(completed)})")
+                    print(f"Task {task_data['id']} for inspection {insp_id} ({task_data['name']}): completed={completed}")
                     tasks_by_inspection[insp_id].append(task_data)
+            
+            # Log summary per inspection
+            for insp_id in inspection_ids:
+                task_count = len(tasks_by_inspection.get(insp_id, []))
+                completed_count = sum(1 for t in tasks_by_inspection.get(insp_id, []) if t.get("completed", False))
+                print(f"Inspection {insp_id}: {completed_count}/{task_count} tasks completed")
         
         # Combine inspections with their tasks
         result = []
@@ -489,8 +496,8 @@ def create_inspection(payload: dict):
         # Handle tasks - use upsert (update or insert) instead of delete + insert
         # This prevents losing tasks if insertion fails
         tasks = payload.get("tasks", [])
-        saved_tasks = []
         return_tasks = tasks  # Default to original tasks if nothing is saved
+        saved_tasks = []
         failed_tasks = []
         
         if tasks:
@@ -515,14 +522,23 @@ def create_inspection(payload: dict):
             # Upsert tasks one by one (update if exists, insert if not)
             for task in tasks:
                 try:
+                    # Ensure completed is a boolean
+                    completed = task.get("completed", False)
+                    if isinstance(completed, str):
+                        completed = completed.lower() in ('true', '1', 'yes', 'on')
+                    elif completed is None:
+                        completed = False
+                    else:
+                        completed = bool(completed)
+                    
                     task_data = {
                         "id": task.get("id") or str(uuid.uuid4()),
                         "inspection_id": inspection_id,
                         "name": task.get("name", ""),
-                        "completed": bool(task.get("completed", False)),  # Ensure boolean
+                        "completed": completed,  # Ensure boolean
                     }
                     task_id = task_data["id"]
-                    print(f"Saving task {task_id} ({task_data['name']}): completed={task_data['completed']} (type: {type(task_data['completed']).__name__})")
+                    print(f"Saving task {task_id} ({task_data['name']}): completed={completed} (type: {type(completed).__name__})")
                     
                     # Try to update if task exists for THIS inspection, otherwise insert
                     # IMPORTANT: Check if task exists for this specific inspection_id
@@ -668,29 +684,380 @@ def create_inspection(payload: dict):
             # Log summary
             print(f"Inspection {inspection_id}: Saved {len(saved_tasks)}/{len(tasks)} tasks. Failed: {len(failed_tasks)}")
             if failed_tasks:
-                print(f"WARNING: {len(failed_tasks)} tasks failed to save for inspection {inspection_id}")
-                if len(failed_tasks) <= 5:
-                    for ft in failed_tasks:
-                        print(f"  Failed task: {ft.get('id')} - {ft.get('name')}")
-                else:
-                    print(f"  First 5 failed tasks:")
-                    for ft in failed_tasks[:5]:
-                        print(f"    {ft.get('id')} - {ft.get('name')}")
-            
-            if len(saved_tasks) < len(tasks):
-                print(f"WARNING: Only {len(saved_tasks)}/{len(tasks)} tasks saved for inspection {inspection_id}")
-            
-            if len(failed_tasks) == len(tasks):
-                print(f"ERROR: All {len(tasks)} tasks failed to save for inspection {inspection_id}")
+                print(f"WARNING: {len(failed_tasks)} tasks failed to save:")
+                for failed_task in failed_tasks[:5]:  # Show first 5 failed tasks
+                    print(f"  - Task {failed_task.get('id')} ({failed_task.get('name')})")
             
             if saved_tasks:
                 return_tasks = saved_tasks
-            # If all tasks failed, keep the original tasks in the response (don't lose them)
+            else:
+                # If all tasks failed, log error but still return original tasks
+                print(f"ERROR: All {len(tasks)} tasks failed to save for inspection {inspection_id}!")
+                return_tasks = tasks  # Return original tasks so frontend doesn't lose them
         
         # Return the created/updated inspection with tasks
         # Include metadata about save success
         completed_count = sum(1 for t in return_tasks if t.get("completed", False))
-        return {
+        result = {
+            "id": inspection_id,
+            "orderId": order_id,
+            "unitNumber": inspection_data["unit_number"],
+            "guestName": inspection_data["guest_name"],
+            "departureDate": inspection_data["departure_date"],
+            "status": inspection_data["status"],
+            "tasks": return_tasks,
+            "savedTasksCount": len(saved_tasks),  # Only count actually saved tasks
+            "totalTasksCount": len(tasks),
+            "completedTasksCount": completed_count,
+            "failedTasksCount": len(failed_tasks),  # Add failed count so frontend knows
+        }
+        print(f"Returning inspection result: {len(return_tasks)} tasks ({len(saved_tasks)} saved, {len(failed_tasks)} failed), {completed_count} completed")
+        if return_tasks:
+            print(f"Sample task from result: id={return_tasks[0].get('id')}, completed={return_tasks[0].get('completed')}")
+        return result
+    except requests.exceptions.HTTPError as e:
+        error_detail = f"HTTP {e.response.status_code}: {e.response.text[:200]}" if e.response else str(e)
+        raise HTTPException(status_code=500, detail=f"Supabase error: {error_detail}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating/updating inspection: {str(e)}")
+
+# ========== CLEANING INSPECTIONS ENDPOINTS ==========
+
+@app.get("/cleaning-inspections")
+def cleaning_inspections():
+    """Get all cleaning inspections with their tasks"""
+    try:
+        # First get all cleaning inspections
+        resp = requests.get(f"{REST_URL}/cleaning_inspections", headers=SERVICE_HEADERS, params={"select": "*"})
+        # If table doesn't exist (404), return empty array
+        if resp.status_code == 404:
+            return []
+        resp.raise_for_status()
+        inspections_list = resp.json() or []
+        
+        # Then get all tasks for these inspections
+        inspection_ids = [insp.get("id") for insp in inspections_list if insp.get("id")]
+        tasks_by_inspection = {}
+        
+        if inspection_ids:
+            # Get all tasks for these inspections
+            try:
+                inspection_ids_str = ','.join(inspection_ids)
+                tasks_resp = requests.get(
+                    f"{REST_URL}/cleaning_inspection_tasks",
+                    headers=SERVICE_HEADERS,
+                    params={"cleaning_inspection_id": f"in.({inspection_ids_str})", "select": "*"}
+                )
+                print(f"Loading tasks for cleaning inspections: {inspection_ids_str}")
+                print(f"Tasks query status: {tasks_resp.status_code}")
+                if tasks_resp.status_code == 404:
+                    all_tasks = []
+                else:
+                    tasks_resp.raise_for_status()
+                    all_tasks = tasks_resp.json() or []
+            except requests.exceptions.HTTPError as e:
+                if e.response and e.response.status_code == 404:
+                    all_tasks = []
+                else:
+                    raise
+            except Exception:
+                all_tasks = []
+            
+            # Group tasks by cleaning_inspection_id
+            print(f"Loaded {len(all_tasks)} tasks from database")
+            for task in all_tasks:
+                insp_id = task.get("cleaning_inspection_id")
+                if insp_id:
+                    if insp_id not in tasks_by_inspection:
+                        tasks_by_inspection[insp_id] = []
+                    completed = task.get("completed", False)
+                    if isinstance(completed, str):
+                        completed = completed.lower() in ('true', '1', 'yes', 'on')
+                    elif completed is None:
+                        completed = False
+                    else:
+                        completed = bool(completed)
+                    
+                    task_data = {
+                        "id": task.get("id"),
+                        "name": task.get("name"),
+                        "completed": completed,
+                    }
+                    tasks_by_inspection[insp_id].append(task_data)
+            
+            for insp_id in inspection_ids:
+                task_count = len(tasks_by_inspection.get(insp_id, []))
+                completed_count = sum(1 for t in tasks_by_inspection.get(insp_id, []) if t.get("completed", False))
+                print(f"Cleaning inspection {insp_id}: {completed_count}/{task_count} tasks completed")
+        
+        result = []
+        for inspection in inspections_list:
+            insp_id = inspection.get("id")
+            inspection_with_tasks = inspection.copy()
+            inspection_with_tasks["tasks"] = tasks_by_inspection.get(insp_id, [])
+            result.append(inspection_with_tasks)
+        
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching cleaning inspections: {str(e)}")
+
+@app.get("/api/cleaning-inspections")
+def api_cleaning_inspections():
+    """Alias for /cleaning-inspections to match frontend expectations"""
+    return cleaning_inspections()
+
+@app.post("/api/cleaning-inspections")
+def create_cleaning_inspection(payload: dict):
+    """Create or update a cleaning inspection mission with its tasks"""
+    try:
+        inspection_id = payload.get("id") or str(uuid.uuid4())
+        order_id = payload.get("orderId") or payload.get("order_id")
+        
+        inspection_data = {
+            "id": inspection_id,
+            "order_id": order_id,
+            "unit_number": payload.get("unitNumber") or payload.get("unit_number", ""),
+            "guest_name": payload.get("guestName") or payload.get("guest_name", ""),
+            "departure_date": payload.get("departureDate") or payload.get("departure_date", ""),
+            "status": payload.get("status", "זמן הביקורות טרם הגיע"),
+        }
+        
+        existing = []
+        try:
+            check_resp = requests.get(
+                f"{REST_URL}/cleaning_inspections",
+                headers=SERVICE_HEADERS,
+                params={"id": f"eq.{inspection_id}", "select": "id"}
+            )
+            if check_resp.status_code == 404:
+                existing = []
+            else:
+                check_resp.raise_for_status()
+                existing = check_resp.json() or []
+        except requests.exceptions.HTTPError as e:
+            if e.response and e.response.status_code == 404:
+                existing = []
+            else:
+                raise
+        except Exception:
+            existing = []
+        
+        if existing and len(existing) > 0:
+            try:
+                update_resp = requests.patch(
+                    f"{REST_URL}/cleaning_inspections?id=eq.{inspection_id}",
+                    headers={**SERVICE_HEADERS, "Prefer": "return=representation"},
+                    json=inspection_data
+                )
+                if update_resp.status_code == 404:
+                    pass  # Table doesn't exist, will be created by migration
+                else:
+                    update_resp.raise_for_status()
+            except requests.exceptions.HTTPError as e:
+                if e.response and e.response.status_code == 404:
+                    pass
+                else:
+                    raise
+        else:
+            try:
+                create_resp = requests.post(
+                    f"{REST_URL}/cleaning_inspections",
+                    headers=SERVICE_HEADERS,
+                    json=inspection_data
+                )
+                if create_resp.status_code == 404:
+                    pass  # Table doesn't exist, will be created by migration
+                elif create_resp.status_code == 409:
+                    # Conflict - inspection already exists, try update
+                    update_resp = requests.patch(
+                        f"{REST_URL}/cleaning_inspections?id=eq.{inspection_id}",
+                        headers={**SERVICE_HEADERS, "Prefer": "return=representation"},
+                        json=inspection_data
+                    )
+                    if update_resp.status_code not in [200, 201, 204, 404]:
+                        update_resp.raise_for_status()
+                else:
+                    create_resp.raise_for_status()
+            except requests.exceptions.HTTPError as e:
+                if e.response and e.response.status_code == 404:
+                    pass
+                else:
+                    raise
+        
+        tasks = payload.get("tasks", [])
+        return_tasks = tasks
+        saved_tasks = []
+        failed_tasks = []
+        
+        if tasks:
+            existing_task_ids = set()
+            try:
+                existing_resp = requests.get(
+                    f"{REST_URL}/cleaning_inspection_tasks",
+                    headers=SERVICE_HEADERS,
+                    params={"cleaning_inspection_id": f"eq.{inspection_id}", "select": "id,name"}
+                )
+                if existing_resp.status_code == 200:
+                    existing_tasks = existing_resp.json() or []
+                    existing_task_ids = {t.get("id") for t in existing_tasks if t.get("id")}
+                    print(f"Found {len(existing_task_ids)} existing tasks for cleaning inspection {inspection_id}: {existing_task_ids}")
+                else:
+                    print(f"No existing tasks found for cleaning inspection {inspection_id} (status: {existing_resp.status_code})")
+            except Exception as e:
+                print(f"Error getting existing tasks for cleaning inspection {inspection_id}: {str(e)}")
+            
+            for task in tasks:
+                try:
+                    completed = task.get("completed", False)
+                    if isinstance(completed, str):
+                        completed = completed.lower() in ('true', '1', 'yes', 'on')
+                    elif completed is None:
+                        completed = False
+                    else:
+                        completed = bool(completed)
+                    
+                    task_data = {
+                        "id": task.get("id") or str(uuid.uuid4()),
+                        "cleaning_inspection_id": inspection_id,
+                        "name": task.get("name", ""),
+                        "completed": completed,
+                    }
+                    task_id = task_data["id"]
+                    print(f"Saving cleaning task {task_id} ({task_data['name']}): completed={completed}")
+                    
+                    task_exists_for_this_inspection = task_id in existing_task_ids
+                    
+                    if task_exists_for_this_inspection:
+                        print(f"  → Updating existing task {task_id} for cleaning inspection {inspection_id}")
+                        update_resp = requests.patch(
+                            f"{REST_URL}/cleaning_inspection_tasks?id=eq.{task_id}&cleaning_inspection_id=eq.{inspection_id}",
+                            headers={**SERVICE_HEADERS, "Prefer": "return=representation"},
+                            json={"completed": task_data["completed"], "name": task_data["name"]}
+                        )
+                        if update_resp.status_code in [200, 201, 204]:
+                            saved_tasks.append(task_data)
+                            print(f"  ✓ Task {task_id} updated successfully")
+                        else:
+                            print(f"  ⚠ Update failed (status {update_resp.status_code}), trying insert...")
+                            task_resp = requests.post(
+                                f"{REST_URL}/cleaning_inspection_tasks",
+                                headers=SERVICE_HEADERS,
+                                json=task_data
+                            )
+                            if task_resp.status_code in [200, 201]:
+                                saved_tasks.append(task_data)
+                                print(f"  ✓ Task {task_id} inserted successfully (after update failed)")
+                            elif task_resp.status_code == 404:
+                                error_text = task_resp.text[:200] if task_resp.text else ""
+                                print(f"  ✗ ERROR: Table doesn't exist (404) - task {task_id} NOT saved: {error_text}")
+                                failed_tasks.append(task_data)
+                            else:
+                                error_text = task_resp.text[:200] if task_resp.text else ""
+                                print(f"  ✗ ERROR: Failed to insert task {task_id} after update failed: {task_resp.status_code} {error_text}")
+                                failed_tasks.append(task_data)
+                    else:
+                        print(f"  → Inserting new task {task_id} for cleaning inspection {inspection_id}")
+                        task_resp = requests.post(
+                            f"{REST_URL}/cleaning_inspection_tasks",
+                            headers=SERVICE_HEADERS,
+                            json=task_data
+                        )
+                        if task_resp.status_code in [200, 201]:
+                            saved_tasks.append(task_data)
+                            print(f"  ✓ Task {task_id} inserted successfully")
+                        elif task_resp.status_code == 404:
+                            error_text = task_resp.text[:200] if task_resp.text else ""
+                            print(f"  ✗ ERROR: Table doesn't exist (404) - task {task_id} NOT saved: {error_text}")
+                            failed_tasks.append(task_data)
+                        elif task_resp.status_code == 409:
+                            print(f"  ⚠ Conflict (409) - task {task_id} may exist for another inspection, trying update...")
+                            try:
+                                update_resp = requests.patch(
+                                    f"{REST_URL}/cleaning_inspection_tasks?id=eq.{task_id}&cleaning_inspection_id=eq.{inspection_id}",
+                                    headers={**SERVICE_HEADERS, "Prefer": "return=representation"},
+                                    json={"completed": task_data["completed"], "name": task_data["name"]}
+                                )
+                                if update_resp.status_code in [200, 201, 204]:
+                                    saved_tasks.append(task_data)
+                                    print(f"  ✓ Task {task_id} updated after conflict")
+                                else:
+                                    error_text = update_resp.text[:200] if update_resp.text else ""
+                                    print(f"  ✗ ERROR: Failed to update task {task_id} after conflict: {update_resp.status_code} {error_text}")
+                                    failed_tasks.append(task_data)
+                            except Exception as e:
+                                print(f"  ✗ ERROR: Exception updating task {task_id} after conflict: {str(e)}")
+                                failed_tasks.append(task_data)
+                        else:
+                            error_text = task_resp.text[:200] if task_resp.text else ""
+                            print(f"  ✗ ERROR: Failed to insert task {task_id}: {task_resp.status_code} {error_text}")
+                            failed_tasks.append(task_data)
+                except requests.exceptions.HTTPError as e:
+                    if e.response and e.response.status_code == 404:
+                        failed_tasks.append({
+                            "id": task.get("id") or str(uuid.uuid4()),
+                            "cleaning_inspection_id": inspection_id,
+                            "name": task.get("name", ""),
+                            "completed": bool(task.get("completed", False)),
+                        })
+                    else:
+                        error_text = e.response.text[:200] if e.response and e.response.text else str(e)
+                        print(f"Warning: Failed to save cleaning task: {error_text}")
+                        failed_tasks.append({
+                            "id": task.get("id") or str(uuid.uuid4()),
+                            "cleaning_inspection_id": inspection_id,
+                            "name": task.get("name", ""),
+                            "completed": bool(task.get("completed", False)),
+                        })
+                except Exception as e:
+                    print(f"Warning: Exception saving cleaning task: {str(e)}")
+                    failed_tasks.append({
+                        "id": task.get("id") or str(uuid.uuid4()),
+                        "cleaning_inspection_id": inspection_id,
+                        "name": task.get("name", ""),
+                        "completed": bool(task.get("completed", False)),
+                    })
+            
+            if saved_tasks and len(saved_tasks) == len(tasks) and len(failed_tasks) == 0:
+                try:
+                    saved_task_ids = {t["id"] for t in saved_tasks}
+                    if existing_task_ids:
+                        tasks_to_delete = existing_task_ids - saved_task_ids
+                        if tasks_to_delete:
+                            print(f"Cleaning up {len(tasks_to_delete)} orphaned tasks for cleaning inspection {inspection_id}: {tasks_to_delete}")
+                            for task_id_to_delete in tasks_to_delete:
+                                try:
+                                    delete_resp = requests.delete(
+                                        f"{REST_URL}/cleaning_inspection_tasks?id=eq.{task_id_to_delete}&cleaning_inspection_id=eq.{inspection_id}",
+                                        headers=SERVICE_HEADERS
+                                    )
+                                    if delete_resp.status_code in [200, 204]:
+                                        print(f"  ✓ Deleted orphaned task {task_id_to_delete} for cleaning inspection {inspection_id}")
+                                    else:
+                                        print(f"  ⚠ Failed to delete task {task_id_to_delete} for cleaning inspection {inspection_id}: {delete_resp.status_code}")
+                                except Exception as e:
+                                    print(f"  ✗ Error deleting task {task_id_to_delete} for cleaning inspection {inspection_id}: {str(e)}")
+                except Exception as e:
+                    print(f"Error during cleanup for cleaning inspection {inspection_id}: {str(e)}")
+            else:
+                if len(failed_tasks) > 0:
+                    print(f"Skipping cleanup for cleaning inspection {inspection_id} - {len(failed_tasks)} tasks failed to save")
+                elif len(saved_tasks) < len(tasks):
+                    print(f"Skipping cleanup for cleaning inspection {inspection_id} - only {len(saved_tasks)}/{len(tasks)} tasks saved")
+            
+            print(f"Cleaning inspection {inspection_id}: Saved {len(saved_tasks)}/{len(tasks)} tasks. Failed: {len(failed_tasks)}")
+            if failed_tasks:
+                print(f"WARNING: {len(failed_tasks)} tasks failed to save:")
+                for failed_task in failed_tasks[:5]:
+                    print(f"  - Task {failed_task.get('id')} ({failed_task.get('name')})")
+            
+            if saved_tasks:
+                return_tasks = saved_tasks
+            else:
+                print(f"ERROR: All {len(tasks)} tasks failed to save for cleaning inspection {inspection_id}!")
+                return_tasks = tasks
+        
+        completed_count = sum(1 for t in return_tasks if t.get("completed", False))
+        result = {
             "id": inspection_id,
             "orderId": order_id,
             "unitNumber": inspection_data["unit_number"],
@@ -703,11 +1070,13 @@ def create_inspection(payload: dict):
             "completedTasksCount": completed_count,
             "failedTasksCount": len(failed_tasks),
         }
+        print(f"Returning cleaning inspection result: {len(return_tasks)} tasks ({len(saved_tasks)} saved, {len(failed_tasks)} failed), {completed_count} completed")
+        return result
     except requests.exceptions.HTTPError as e:
         error_detail = f"HTTP {e.response.status_code}: {e.response.text[:200]}" if e.response else str(e)
         raise HTTPException(status_code=500, detail=f"Supabase error: {error_detail}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error creating/updating inspection: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error creating/updating cleaning inspection: {str(e)}")
 
 @app.patch("/api/inspections/{inspection_id}/tasks/{task_id}")
 def update_inspection_task(inspection_id: str, task_id: str, payload: dict):
@@ -1356,6 +1725,151 @@ def api_reports_summary():
     """Alias for /reports/summary to match frontend expectations"""
     return reports_summary()
 
+@app.get("/api/reports/monthly-income-expenses")
+def monthly_income_expenses():
+    """
+    Get monthly breakdown of income (from orders) and expenses (from invoices)
+    Returns data grouped by month in format: YYYY-MM
+    """
+    from collections import defaultdict
+    from datetime import datetime
+    
+    try:
+        # Get all orders with their dates and amounts
+        try:
+            orders_resp = requests.get(
+                f"{REST_URL}/orders", 
+                headers=SERVICE_HEADERS, 
+                params={"select": "total_amount,paid_amount,arrival_date"}
+            )
+            orders_resp.raise_for_status()
+            orders = orders_resp.json() or []
+        except Exception as e:
+            print(f"Warning: Could not fetch orders: {e}")
+            orders = []
+        
+        # Group income by month from orders
+        monthly_income = defaultdict(float)
+        for order in orders:
+            arrival_date = order.get("arrival_date")
+            if arrival_date:
+                try:
+                    # Parse date and get YYYY-MM format
+                    if isinstance(arrival_date, str):
+                        date_obj = datetime.strptime(arrival_date.split('T')[0], "%Y-%m-%d")
+                    else:
+                        date_obj = arrival_date
+                    month_key = date_obj.strftime("%Y-%m")
+                    # Use paid_amount if available, otherwise total_amount
+                    amount = order.get("paid_amount") or order.get("total_amount") or 0
+                    monthly_income[month_key] += float(amount) if amount else 0
+                except (ValueError, TypeError, AttributeError) as e:
+                    print(f"Error parsing order date {arrival_date}: {e}")
+                    continue
+        
+        # Get all invoices with their dates and amounts
+        monthly_expenses = defaultdict(float)
+        try:
+            invoices_resp = requests.get(
+                f"{REST_URL}/invoices",
+                headers=SERVICE_HEADERS,
+                params={"select": "*"}
+            )
+            invoices_resp.raise_for_status()
+            invoices = invoices_resp.json() or []
+        except Exception as e:
+            print(f"Warning: Could not fetch invoices (table might not exist): {e}")
+            invoices = []
+        
+        # Group expenses by month from invoices
+        for invoice in invoices:
+            try:
+                # Try to get date from different fields
+                invoice_date = invoice.get("issued_at") or invoice.get("date")
+                extracted_data = invoice.get("extracted_data")
+                
+                # Parse extracted_data if it's a string
+                if isinstance(extracted_data, str):
+                    try:
+                        import json
+                        extracted_data = json.loads(extracted_data)
+                    except:
+                        extracted_data = None
+                
+                if not invoice_date and extracted_data and isinstance(extracted_data, dict):
+                    invoice_info = extracted_data.get("invoice", {})
+                    invoice_date = invoice_info.get("invoice_date")
+                
+                # If still no date, use created_at or current month as fallback
+                if not invoice_date:
+                    invoice_date = invoice.get("created_at") or datetime.now().strftime("%Y-%m-%d")
+                
+                # Always process the invoice (even if we use fallback date)
+                if invoice_date:
+                    try:
+                        # Parse date and get YYYY-MM format
+                        if isinstance(invoice_date, str):
+                            # Handle different date formats
+                            date_str = invoice_date.split('T')[0].split(' ')[0]
+                            try:
+                                date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+                            except ValueError:
+                                # Try other formats or use current date
+                                date_obj = datetime.now()
+                        else:
+                            date_obj = invoice_date
+                        month_key = date_obj.strftime("%Y-%m")
+                        
+                        # Get amount - prioritize extracted_data.total_price (simplified schema)
+                        amount = None
+                        if extracted_data and isinstance(extracted_data, dict):
+                            # First check the simplified schema structure
+                            amount = extracted_data.get("total_price")
+                            # If not found, check old detailed schema
+                            if not amount:
+                                totals = extracted_data.get("totals", {})
+                                amount = totals.get("grand_total") or totals.get("amount_due")
+                        
+                        # Fallback to invoice-level fields
+                        if not amount:
+                            amount = invoice.get("total_price") or invoice.get("amount")
+                        
+                        if amount:
+                            try:
+                                amount_float = float(amount) if amount else 0
+                                monthly_expenses[month_key] += amount_float
+                                print(f"Invoice {invoice.get('id')}: Added {amount_float} to month {month_key}")
+                            except (ValueError, TypeError) as e:
+                                print(f"Error converting amount {amount} to float: {e}")
+                        else:
+                            print(f"Invoice {invoice.get('id')}: No amount found, extracted_data keys: {list(extracted_data.keys()) if isinstance(extracted_data, dict) else 'not a dict'}")
+                    except (ValueError, TypeError, AttributeError) as e:
+                        print(f"Error parsing invoice date {invoice_date}: {e}")
+                        continue
+            except Exception as e:
+                print(f"Error processing invoice: {e}")
+                continue
+        
+        # Combine all months and create sorted list
+        all_months = set(list(monthly_income.keys()) + list(monthly_expenses.keys()))
+        monthly_data = []
+        for month in sorted(all_months, reverse=True):  # Most recent first
+            monthly_data.append({
+                "month": month,
+                "income": monthly_income.get(month, 0),
+                "expenses": monthly_expenses.get(month, 0),
+                "net": monthly_income.get(month, 0) - monthly_expenses.get(month, 0)
+            })
+        
+        return {
+            "monthly_data": monthly_data,
+            "total_income": sum(monthly_income.values()),
+            "total_expenses": sum(monthly_expenses.values()),
+            "total_net": sum(monthly_income.values()) - sum(monthly_expenses.values())
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching monthly income/expenses: {str(e)}")
+
 @app.get("/invoices")
 def invoices():
     """Get all invoices - maps to actual table schema: id, vendor, invoice_number, amount, payment_method, issued_at, file_url"""
@@ -1371,18 +1885,34 @@ def invoices():
         # Map database columns to frontend format
         mapped_invoices = []
         for inv in invoices:
-            mapped = {
-                "id": str(inv.get("id", "")),
-                "image_data": inv.get("file_url", ""),  # Map file_url to image_data
-                "total_price": inv.get("amount"),  # Map amount to total_price
-                "currency": "ILS",  # Default since not in table
-                "vendor": inv.get("vendor"),
-                "date": inv.get("issued_at"),  # Map issued_at to date
-                "invoice_number": inv.get("invoice_number"),
-                "extracted_data": None,  # Not stored in table
-                "created_at": inv.get("issued_at"),  # Use issued_at as created_at
-                "updated_at": inv.get("issued_at"),
-            }
+            # Check if we have the new structure with extracted_data
+            if inv.get("extracted_data"):
+                mapped = {
+                    "id": str(inv.get("id", "")),
+                    "image_data": inv.get("image_data") or inv.get("file_url", ""),
+                    "total_price": inv.get("total_price") or inv.get("amount"),
+                    "currency": inv.get("currency", "ILS"),
+                    "vendor": inv.get("vendor"),
+                    "date": inv.get("date") or inv.get("issued_at"),
+                    "invoice_number": inv.get("invoice_number"),
+                    "extracted_data": inv.get("extracted_data"),  # Full structured data
+                    "created_at": inv.get("created_at") or inv.get("issued_at"),
+                    "updated_at": inv.get("updated_at") or inv.get("issued_at"),
+                }
+            else:
+                # Legacy format - map old structure
+                mapped = {
+                    "id": str(inv.get("id", "")),
+                    "image_data": inv.get("file_url", "") or inv.get("image_data", ""),
+                    "total_price": inv.get("amount") or inv.get("total_price"),
+                    "currency": inv.get("currency", "ILS"),
+                    "vendor": inv.get("vendor"),
+                    "date": inv.get("issued_at") or inv.get("date"),
+                    "invoice_number": inv.get("invoice_number"),
+                    "extracted_data": None,
+                    "created_at": inv.get("created_at") or inv.get("issued_at"),
+                    "updated_at": inv.get("updated_at") or inv.get("issued_at"),
+                }
             mapped_invoices.append(mapped)
         return mapped_invoices
     except requests.exceptions.HTTPError as e:
@@ -1400,18 +1930,33 @@ def invoices():
                 # Map database columns to frontend format
                 mapped_invoices = []
                 for inv in invoices:
-                    mapped = {
-                        "id": str(inv.get("id", "")),
-                        "image_data": inv.get("file_url", ""),
-                        "total_price": inv.get("amount"),
-                        "currency": "ILS",
-                        "vendor": inv.get("vendor"),
-                        "date": inv.get("issued_at"),
-                        "invoice_number": inv.get("invoice_number"),
-                        "extracted_data": None,
-                        "created_at": inv.get("issued_at"),
-                        "updated_at": inv.get("issued_at"),
-                    }
+                    # Check if we have the new structure with extracted_data
+                    if inv.get("extracted_data"):
+                        mapped = {
+                            "id": str(inv.get("id", "")),
+                            "image_data": inv.get("image_data") or inv.get("file_url", ""),
+                            "total_price": inv.get("total_price") or inv.get("amount"),
+                            "currency": inv.get("currency", "ILS"),
+                            "vendor": inv.get("vendor"),
+                            "date": inv.get("date") or inv.get("issued_at"),
+                            "invoice_number": inv.get("invoice_number"),
+                            "extracted_data": inv.get("extracted_data"),
+                            "created_at": inv.get("created_at") or inv.get("issued_at"),
+                            "updated_at": inv.get("updated_at") or inv.get("issued_at"),
+                        }
+                    else:
+                        mapped = {
+                            "id": str(inv.get("id", "")),
+                            "image_data": inv.get("file_url", "") or inv.get("image_data", ""),
+                            "total_price": inv.get("amount") or inv.get("total_price"),
+                            "currency": inv.get("currency", "ILS"),
+                            "vendor": inv.get("vendor"),
+                            "date": inv.get("issued_at") or inv.get("date"),
+                            "invoice_number": inv.get("invoice_number"),
+                            "extracted_data": None,
+                            "created_at": inv.get("created_at") or inv.get("issued_at"),
+                            "updated_at": inv.get("updated_at") or inv.get("issued_at"),
+                        }
                     mapped_invoices.append(mapped)
                 return mapped_invoices
             except:
@@ -1481,75 +2026,51 @@ async def process_invoice(request: Request):
         # Initialize OpenAI client
         client = OpenAI(api_key=openai_key)
         
-        # Initialize default invoice data (empty fields) - will be used if OpenAI fails
+        # Initialize simple invoice data structure - only 2 fields
         invoice_data = {
             "total_price": None,
-            "currency": "ILS",
-            "items": [],
-            "vendor": None,
-            "date": None,
-            "invoice_number": None
+            "product_description": None
         }
         
-        # Try to call OpenAI Vision API
+        # Try to call OpenAI Responses API with GPT-5.2
         try:
-            response = client.chat.completions.create(
-                model="gpt-5.1",
-            messages=[
-                {
-                    "role": "system",
-                    "content": """You are an expert at extracting invoice data from images. 
+            response = client.responses.create(
+                model="gpt-5.2",
+                input=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": """Extract invoice data from this image and return it as a JSON object with only 2 fields.
 
 CRITICAL: You MUST respond with ONLY valid JSON. No markdown, no code blocks, no explanations, no text before or after the JSON. Just the raw JSON object.
 
 The JSON structure MUST be exactly:
 {
-    "total_price": <number or null>,
-    "currency": "<string or null>",
-    "items": [
-        {
-            "name": "<string>",
-            "quantity": <number>,
-            "unit_price": <number>,
-            "total_price": <number>
-        }
-    ],
-    "vendor": "<string or null>",
-    "date": "<string or null>",
-    "invoice_number": "<string or null>"
+  "total_price": <number or null>,
+  "product_description": "<string or null>"
 }
 
 Rules:
+- total_price: Extract the final total amount to pay from the invoice (look for "Total", "סה\"כ", "Amount Due", etc.). Must be a number or null.
+- product_description: Extract a description of what products/services are on the invoice. This should be a summary of the main items or services. Must be a string or null.
 - If a field is not found, use null (not empty string, not 0, use null)
-- total_price must be a number or null
-- currency must be a string like "ILS", "USD", "EUR" or null
-- items must be an array (can be empty [])
-- Each item must have name (string), quantity (number), unit_price (number), total_price (number)
-- vendor, date, invoice_number must be strings or null
+- Be thorough and extract all available information
 
 Return ONLY the JSON object, nothing else."""
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:{image_mime};base64,{image_base64}"
+                            },
+                            {
+                                "type": "input_image",
+                                "image_url": f"data:{image_mime};base64,{image_base64}"
                             }
-                        },
-                        {
-                            "type": "text",
-                            "text": "Extract invoice data from this image. Return ONLY valid JSON with no markdown, no code blocks, no explanations. Just the raw JSON object starting with { and ending with }."
-                        }
-                    ]
-                }
-            ],
-                max_tokens=2000
+                        ]
+                    }
+                ]
             )
             
-            # Parse the response
-            content = response.choices[0].message.content if response.choices and response.choices[0].message.content else ""
+            # Parse the response - Responses API returns output_text
+            content = response.output_text if hasattr(response, 'output_text') else ""
             
             # Try to extract and parse JSON from the response
             if content:
@@ -1576,29 +2097,17 @@ Return ONLY the JSON object, nothing else."""
                     # Try to parse the JSON
                     parsed_data = json.loads(json_content)
                     
-                    # Validate and merge parsed data with defaults
+                    # Validate and merge parsed data with defaults - simple 2 field structure
                     if isinstance(parsed_data, dict):
-                        # Ensure all required fields exist with proper types
-                        if "total_price" in parsed_data and parsed_data["total_price"] is not None:
+                        if "total_price" in parsed_data:
                             try:
-                                invoice_data["total_price"] = float(parsed_data["total_price"])
+                                invoice_data["total_price"] = float(parsed_data["total_price"]) if parsed_data["total_price"] is not None else None
                             except (ValueError, TypeError):
                                 invoice_data["total_price"] = None
                         
-                        if "currency" in parsed_data:
-                            invoice_data["currency"] = str(parsed_data["currency"]) if parsed_data["currency"] else "ILS"
+                        if "product_description" in parsed_data:
+                            invoice_data["product_description"] = str(parsed_data["product_description"]) if parsed_data["product_description"] else None
                         
-                        if "items" in parsed_data and isinstance(parsed_data["items"], list):
-                            invoice_data["items"] = parsed_data["items"]
-                        
-                        if "vendor" in parsed_data:
-                            invoice_data["vendor"] = str(parsed_data["vendor"]) if parsed_data["vendor"] else None
-                        
-                        if "date" in parsed_data:
-                            invoice_data["date"] = str(parsed_data["date"]) if parsed_data["date"] else None
-                        
-                        if "invoice_number" in parsed_data:
-                            invoice_data["invoice_number"] = str(parsed_data["invoice_number"]) if parsed_data["invoice_number"] else None
                 except (json.JSONDecodeError, AttributeError, KeyError, ValueError, TypeError) as parse_error:
                     # If parsing fails, log the error but continue with empty fields
                     print(f"Warning: Could not parse OpenAI response: {parse_error}")
@@ -1610,23 +2119,45 @@ Return ONLY the JSON object, nothing else."""
             print("Saving invoice with empty fields - user can edit manually")
             # Continue with empty invoice_data - user can edit manually
         
-        # Save to database - map to actual table schema: id (int8 auto), vendor, invoice_number, amount, payment_method, issued_at, file_url
+        # Save to database - simple 2 field structure
         invoice_record = {
-            # Don't send id - let Supabase auto-generate as int8
-            "file_url": image_data_uri,  # Map image_data to file_url
-            "amount": invoice_data.get("total_price"),  # Map total_price to amount
-            "vendor": invoice_data.get("vendor"),
-            "invoice_number": invoice_data.get("invoice_number"),
-            "issued_at": invoice_data.get("date"),  # Map date to issued_at
-            "payment_method": None  # Not extracted, can be null
+            "image_data": image_data_uri,
+            "total_price": invoice_data.get("total_price"),
+            "currency": "ILS",  # Default currency
+            "vendor": None,
+            "date": None,
+            "invoice_number": None,
+            "extracted_data": invoice_data  # Store the simple structured data
+        }
+        
+        # Fallback record for old table structure if needed
+        invoice_record_fallback = {
+            "file_url": image_data_uri,
+            "amount": invoice_data.get("total_price"),
+            "vendor": None,
+            "invoice_number": None,
+            "issued_at": None,
+            "payment_method": None
         }
         
         try:
+            # Try to save with new structure first
             resp = requests.post(
                 f"{REST_URL}/invoices",
                 headers=SERVICE_HEADERS,
                 json=invoice_record
             )
+            
+            # If that fails, try fallback structure
+            if resp.status_code not in [200, 201]:
+                try:
+                    resp = requests.post(
+                        f"{REST_URL}/invoices",
+                        headers=SERVICE_HEADERS,
+                        json=invoice_record_fallback
+                    )
+                except:
+                    pass
             # Check if save was successful
             if resp.status_code == 201 or resp.status_code == 200:
                 saved_invoice = resp.json()
