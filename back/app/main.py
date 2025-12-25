@@ -324,12 +324,10 @@ def delete_order(order_id: str):
 def inspections(type: str = None):
     """Get all inspections with their tasks, optionally filtered by type"""
     try:
-        # Build query params
+        # Build query params (don't filter by type in SQL - column might not exist)
         params = {"select": "*"}
-        if type:
-            params["type"] = f"eq.{type}"
         
-        # First get all inspections (filtered by type if provided)
+        # First get all inspections
         resp = requests.get(f"{REST_URL}/inspections", headers=SERVICE_HEADERS, params=params)
         # If table doesn't exist (404), return empty array
         if resp.status_code == 404:
