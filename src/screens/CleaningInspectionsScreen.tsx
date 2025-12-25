@@ -166,8 +166,13 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
     }
     
     setInspectionMissions(prev => {
-      const prevByOrderId = new Map<string, InspectionMission>()
-      prev.forEach(m => prevByOrderId.set(m.orderId, m))
+      // Map by inspection ID (CLEAN- prefix) to only find cleaning inspections
+      const prevByInspectionId = new Map<string, InspectionMission>()
+      prev.forEach(m => {
+        if (m.id.startsWith('CLEAN-')) {
+          prevByInspectionId.set(m.id, m)
+        }
+      })
 
       const next: InspectionMission[] = []
       const newMissions: InspectionMission[] = []
@@ -175,7 +180,8 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
       orders
         .filter(o => o.status !== 'בוטל')
         .forEach(o => {
-          const existing = prevByOrderId.get(o.id)
+          const inspectionId = `CLEAN-${o.id}`
+          const existing = prevByInspectionId.get(inspectionId)
           const isNew = !existing
           
           // Ensure tasks are always populated with all default tasks
