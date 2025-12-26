@@ -1,0 +1,108 @@
+.monthly-inspections-screen {
+  min-height: 100vh;
+  background: linear-gradient(to bottom, #f8fafc 0%, #e2e8f0 100%);
+  display: flex;
+  flex-direction: column;
+}
+
+.monthly-inspections-header {
+  padding: 16px;
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+}
+
+.back-button {
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.back-button:hover {
+  background: #dc2626;
+}
+
+.monthly-inspections-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.monthly-inspections-title-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+  gap: 16px;
+}
+
+.monthly-inspections-title {
+  font-size: 28px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 8px 0;
+}
+
+.monthly-inspections-subtitle {
+  font-size: 14px;
+  color: #64748b;
+  margin: 0;
+}
+
+.monthly-inspections-stats-badge {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  padding: 12px 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.monthly-inspections-stats-text {
+  color: white;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.monthly-inspections-empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.monthly-inspections-empty-text {
+  font-size: 18px;
+  color: #64748b;
+  margin: 0;
+}
+
+.monthly-inspections-missions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.monthly-inspections-month-section {
+  margin-bottom: 32px;
+  background: white;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.monthly-inspections-month-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 16px 0;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #e2e8f0;
+}
+

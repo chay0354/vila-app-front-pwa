@@ -9,6 +9,7 @@ import OrdersScreen from './screens/OrdersScreen'
 import OrderEditScreen from './screens/OrderEditScreen'
 import ExitInspectionsScreen from './screens/ExitInspectionsScreen'
 import CleaningInspectionsScreen from './screens/CleaningInspectionsScreen'
+import MonthlyInspectionsScreen from './screens/MonthlyInspectionsScreen'
 import MaintenanceScreen from './screens/MaintenanceScreen'
 import MaintenanceTasksScreen from './screens/MaintenanceTasksScreen'
 import MaintenanceTaskDetailScreen from './screens/MaintenanceTaskDetailScreen'
@@ -157,20 +158,12 @@ function App() {
   const [userRole, setUserRole] = useState<string | null>(null)
   const [userImageUrl, setUserImageUrl] = useState<string | null>(null)
 
-  // Load user from localStorage on mount
+  // Clear localStorage on mount to require authentication every time
+  // User must sign in/up each session
   useEffect(() => {
-    const savedUser = localStorage.getItem('userName')
-    const savedRole = localStorage.getItem('userRole')
-    const savedImageUrl = localStorage.getItem('userImageUrl')
-    if (savedUser) {
-      setUserName(savedUser)
-    }
-    if (savedRole) {
-      setUserRole(savedRole)
-    }
-    if (savedImageUrl) {
-      setUserImageUrl(savedImageUrl)
-    }
+    localStorage.removeItem('userName')
+    localStorage.removeItem('userRole')
+    localStorage.removeItem('userImageUrl')
   }, [])
 
   // Save user to localStorage when it changes
@@ -268,6 +261,16 @@ function App() {
           element={
             userName ? (
               <CleaningInspectionsScreen userName={userName} />
+            ) : (
+              <Navigate to="/signin" replace />
+            )
+          } 
+        />
+        <Route 
+          path="/monthly-inspections" 
+          element={
+            userName ? (
+              <MonthlyInspectionsScreen userName={userName} />
             ) : (
               <Navigate to="/signin" replace />
             )

@@ -131,6 +131,14 @@ function HubScreen({ userName, userRole, userImageUrl }: HubScreenProps) {
               <span className="hub-quick-action-text">ביקורת ניקיון</span>
             </button>
             <button
+              className="hub-quick-action-btn hub-quick-action-amber"
+              onClick={() => navigate('/monthly-inspections')}
+              type="button"
+            >
+              <span className="hub-quick-action-icon">📅</span>
+              <span className="hub-quick-action-text">ביקורות חודשיות</span>
+            </button>
+            <button
               className="hub-quick-action-btn hub-quick-action-purple"
               onClick={() => navigate('/warehouse')}
               type="button"
@@ -167,14 +175,6 @@ function HubScreen({ userName, userRole, userImageUrl }: HubScreenProps) {
               </>
             )}
             <button
-              className="hub-quick-action-btn hub-quick-action-yellow"
-              onClick={() => navigate('/chat')}
-              type="button"
-            >
-              <span className="hub-quick-action-icon">💬</span>
-              <span className="hub-quick-action-text">צ׳אט פנימי</span>
-            </button>
-            <button
               className="hub-quick-action-btn hub-quick-action-pink"
               onClick={() => navigate('/attendance')}
               type="button"
@@ -191,6 +191,18 @@ function HubScreen({ userName, userRole, userImageUrl }: HubScreenProps) {
               <span className="hub-quick-action-text">סידורי ניקיון</span>
             </button>
           </div>
+        </div>
+
+        {/* Chat button at bottom - full width */}
+        <div className="hub-chat-section">
+          <button
+            className="hub-chat-button"
+            onClick={() => navigate('/chat')}
+            type="button"
+          >
+            <span className="hub-quick-action-icon">💬</span>
+            <span className="hub-quick-action-text">צ׳אט פנימי</span>
+          </button>
         </div>
       </div>
     </div>

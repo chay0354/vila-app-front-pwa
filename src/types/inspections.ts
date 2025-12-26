@@ -92,3 +92,27 @@ export const defaultCleaningInspectionTasks: InspectionTask[] = [
   { id: '31', name: 'להעביר סמרטוט על הפחים ולשים שקיות', completed: false },
 ]
 
+// Default tasks for monthly inspections
+export const defaultMonthlyInspectionTasks: InspectionTask[] = [
+  { id: '1', name: 'בדיקת תקינות מערכות חשמל', completed: false },
+  { id: '2', name: 'בדיקת תקינות מערכות מים', completed: false },
+  { id: '3', name: 'בדיקת תקינות מערכות גז', completed: false },
+  { id: '4', name: 'בדיקת תקינות מזגנים', completed: false },
+  { id: '5', name: 'בדיקת תקינות דודי שמש', completed: false },
+  { id: '6', name: 'בדיקת תקינות מערכות אבטחה', completed: false },
+  { id: '7', name: 'בדיקת תקינות מערכות תאורה', completed: false },
+  { id: '8', name: 'בדיקת תקינות דלתות וחלונות', completed: false },
+  { id: '9', name: 'בדיקת תקינות ריהוט וציוד', completed: false },
+  { id: '10', name: 'בדיקת תקינות מערכות ניקוז', completed: false },
+  { id: '11', name: 'בדיקת תקינות מערכות אוורור', completed: false },
+  { id: '12', name: 'בדיקת תקינות מערכות כיבוי אש', completed: false },
+  { id: '13', name: 'בדיקת תקינות מערכות אינטרנט', completed: false },
+  { id: '14', name: 'בדיקת תקינות מערכות טלוויזיה', completed: false },
+  { id: '15', name: 'בדיקת תקינות מערכות מיזוג', completed: false },
+  { id: '16', name: 'בדיקת תקינות מערכות מים חמים', completed: false },
+  { id: '17', name: 'בדיקת תקינות מערכות תאורה חוץ', completed: false },
+  { id: '18', name: 'בדיקת תקינות מערכות השקיה', completed: false },
+  { id: '19', name: 'בדיקת תקינות מערכות בריכה', completed: false },
+  { id: '20', name: 'בדיקת תקינות מערכות גקוזי', completed: false },
+]
+

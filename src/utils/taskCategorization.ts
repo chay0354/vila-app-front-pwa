@@ -69,6 +69,73 @@ export function categorizeTasks(tasks: InspectionTask[]): TaskCategory[] {
   return orderedCategories
 }
 
+// Categorize cleaning inspection tasks by category (מטבח, סלון, מסדרון, חצר)
+export function categorizeCleaningTasks(tasks: InspectionTask[]): TaskCategory[] {
+  const categories: { [key: string]: InspectionTask[] } = {
+    'מטבח': [],
+    'סלון': [],
+    'מסדרון': [],
+    'חצר': [],
+  }
 
+  tasks.forEach(task => {
+    const taskId = parseInt(task.id) || 0
+    
+    // מטבח (Kitchen) - tasks 1-17
+    if (taskId >= 1 && taskId <= 17) {
+      categories['מטבח'].push(task)
+    }
+    // סלון (Living Room) - tasks 18-22
+    else if (taskId >= 18 && taskId <= 22) {
+      categories['סלון'].push(task)
+    }
+    // מסדרון (Hallway) - task 23
+    else if (taskId === 23) {
+      categories['מסדרון'].push(task)
+    }
+    // חצר (Yard) - tasks 24-31
+    else if (taskId >= 24 && taskId <= 31) {
+      categories['חצר'].push(task)
+    }
+    // Fallback: try to categorize by name
+    else {
+      const taskName = task.name.toLowerCase()
+      if (taskName.includes('מטבח') || taskName.includes('קפה') || taskName.includes('כלים') || 
+          taskName.includes('מקרר') || taskName.includes('תנור') || taskName.includes('כיריים') ||
+          taskName.includes('מיקרו') || taskName.includes('כיור') || taskName.includes('סבון') ||
+          taskName.includes('סכו') || taskName.includes('פילטר') || taskName.includes('פח')) {
+        categories['מטבח'].push(task)
+      } else if (taskName.includes('סלון') || taskName.includes('שולחן אוכל') || 
+                 taskName.includes('ספה') || taskName.includes('כורסאות') || 
+                 taskName.includes('חלונות') || taskName.includes('תריסים')) {
+        categories['סלון'].push(task)
+      } else if (taskName.includes('מסדרון') || taskName.includes('שטיחים')) {
+        categories['מסדרון'].push(task)
+      } else if (taskName.includes('חצר') || taskName.includes('מנגל') || 
+                 taskName.includes('דשא') || taskName.includes('פחים') || 
+                 taskName.includes('ברזים') || taskName.includes('עציצים') ||
+                 taskName.includes('רצפה בחוץ')) {
+        categories['חצר'].push(task)
+      } else {
+        // Default to מטבח if can't determine
+        categories['מטבח'].push(task)
+      }
+    }
+  })
 
+  // Return only categories that have tasks, in a specific order
+  const orderedCategories: TaskCategory[] = []
+  const categoryOrder = ['מטבח', 'סלון', 'מסדרון', 'חצר']
+  
+  categoryOrder.forEach(categoryName => {
+    if (categories[categoryName].length > 0) {
+      orderedCategories.push({
+        name: categoryName,
+        tasks: categories[categoryName],
+      })
+    }
+  })
+
+  return orderedCategories
+}
 

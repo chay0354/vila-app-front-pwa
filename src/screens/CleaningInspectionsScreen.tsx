@@ -494,6 +494,7 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
                 mission={mission}
                 onToggleTask={handleToggleTask}
                 onSave={handleSave}
+                isCleaningInspection={true}
               />
             ))}
           </div>

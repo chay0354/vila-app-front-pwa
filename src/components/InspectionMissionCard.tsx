@@ -1,19 +1,21 @@
 import { useState } from 'react'
 import { InspectionMission } from '../types/inspections'
 import { computeInspectionStatus } from '../utils/inspectionUtils'
-import { categorizeTasks } from '../utils/taskCategorization'
+import { categorizeTasks, categorizeCleaningTasks } from '../utils/taskCategorization'
 import './InspectionMissionCard.css'
 
 type InspectionMissionCardProps = {
   mission: InspectionMission
   onToggleTask: (missionId: string, taskId: string) => void
   onSave: (missionId: string) => void
+  isCleaningInspection?: boolean
 }
 
 function InspectionMissionCard({
   mission,
   onToggleTask,
   onSave,
+  isCleaningInspection = false,
 }: InspectionMissionCardProps) {
   const [expanded, setExpanded] = useState(false)
 
@@ -96,7 +98,7 @@ function InspectionMissionCard({
           </div>
 
           <div className="inspection-mission-tasks-list">
-            {categorizeTasks(mission.tasks).map(category => (
+            {(isCleaningInspection ? categorizeCleaningTasks(mission.tasks) : categorizeTasks(mission.tasks)).map(category => (
               <div key={category.name} className="inspection-mission-task-category">
                 <h5 className="inspection-mission-task-category-title">{category.name}</h5>
                 {category.tasks.map(task => (

@@ -260,6 +260,45 @@
   color: #0f172a;
 }
 
+.hub-quick-action-amber {
+  background-color: #fef3c7;
+  border: 2px solid #f59e0b;
+}
+
+.hub-quick-action-amber .hub-quick-action-text {
+  color: #0f172a;
+}
+
+.hub-chat-section {
+  margin-top: 24px;
+  padding-bottom: 20px;
+}
+
+.hub-chat-button {
+  width: 100%;
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
+  background-color: #eab308;
+}
+
+.hub-chat-button:hover {
+  opacity: 0.9;
+  transform: translateY(1px);
+}
+
+.hub-chat-button:active {
+  transform: translateY(2px);
+}
+
 .hub-quick-action-icon {
   font-size: 28px;
   margin-bottom: 6px;
