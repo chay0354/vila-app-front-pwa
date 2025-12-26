@@ -63,7 +63,7 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
         console.log('Backend returned', data?.length || 0, 'cleaning inspections')
         
         // Group by departure date - one mission per departure date
-        const missionsByDate = new Map<string, InspectionMission>()
+        const missionsByDate = new Map() as Map<string, InspectionMission>
         
         (data || []).forEach((insp: any) => {
           const backendTasks = (insp.tasks || []).map((t: any) => ({
@@ -114,16 +114,16 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
           
           // Group by departure date - keep the one with more completed tasks
           const existing = missionsByDate.get(departureDate)
-          if (!existing || (existing.tasks.filter(t => t.completed).length < mission.tasks.filter(t => t.completed).length)) {
+          if (!existing || (existing.tasks.filter((t: InspectionTask) => t.completed).length < mission.tasks.filter((t: InspectionTask) => t.completed).length)) {
             missionsByDate.set(departureDate, mission)
           }
         })
         
         // Convert to array (one per departure date)
-        const finalMissions = Array.from(missionsByDate.values())
+        const finalMissions: InspectionMission[] = Array.from(missionsByDate.values())
         console.log('Setting cleaning missions (grouped by departure date):', finalMissions.length, 'missions')
-        finalMissions.forEach(m => {
-          const completedCount = m.tasks.filter(t => t.completed).length
+        finalMissions.forEach((m: InspectionMission) => {
+          const completedCount = m.tasks.filter((t: InspectionTask) => t.completed).length
           console.log(`  Cleaning mission ${m.id} (${m.departureDate}): ${completedCount}/${m.tasks.length} tasks completed`)
         })
         
