@@ -227,6 +227,43 @@ function OrderEditScreen({}: OrderEditScreenProps) {
     }
   }
 
+  const handleDelete = async () => {
+    if (isNewOrder) {
+      // For new orders, just navigate back
+      navigate('/orders')
+      return
+    }
+
+    const orderId = id || order?.id
+    if (!orderId) {
+      alert('לא ניתן למחוק הזמנה ללא מזהה')
+      return
+    }
+
+    if (!confirm('האם אתה בטוח שברצונך למחוק את ההזמנה? פעולה זו לא ניתנת לביטול.')) {
+      return
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/orders/${orderId}`, {
+        method: 'DELETE',
+      })
+
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => '')
+        console.error('Failed to delete order:', res.status, errorText)
+        alert(`לא ניתן למחוק את ההזמנה: ${res.status}`)
+        return
+      }
+
+      alert('ההזמנה נמחקה בהצלחה')
+      navigate('/orders')
+    } catch (err) {
+      console.error('Error deleting order:', err)
+      alert('לא ניתן למחוק את ההזמנה')
+    }
+  }
+
   if (loading) {
     return (
       <div className="order-edit-container">
@@ -524,6 +561,15 @@ function OrderEditScreen({}: OrderEditScreenProps) {
             >
               ביטול
             </button>
+            {!isNewOrder && (
+              <button
+                className="order-edit-delete-button"
+                onClick={handleDelete}
+                type="button"
+              >
+                מחק הזמנה
+              </button>
+            )}
           </div>
         </div>
       </div>
