@@ -160,8 +160,13 @@ function InvoicesScreen({}: InvoicesScreenProps) {
       if (response.ok) {
         await loadInvoices()
         alert('החשבונית נמחקה בהצלחה')
+      } else {
+        const errorText = await response.text().catch(() => '')
+        console.error('Failed to delete invoice:', response.status, errorText)
+        alert(`לא ניתן למחוק את החשבונית: ${response.status}`)
       }
     } catch (err) {
+      console.error('Error deleting invoice:', err)
       alert('לא ניתן למחוק את החשבונית')
     }
   }
