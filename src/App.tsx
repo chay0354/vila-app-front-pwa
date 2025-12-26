@@ -8,6 +8,7 @@ import HubScreen from './screens/HubScreen'
 import OrdersScreen from './screens/OrdersScreen'
 import OrderEditScreen from './screens/OrderEditScreen'
 import ExitInspectionsScreen from './screens/ExitInspectionsScreen'
+import CleaningInspectionsScreen from './screens/CleaningInspectionsScreen'
 import MaintenanceScreen from './screens/MaintenanceScreen'
 import MaintenanceTasksScreen from './screens/MaintenanceTasksScreen'
 import MaintenanceTaskDetailScreen from './screens/MaintenanceTaskDetailScreen'
@@ -153,12 +154,22 @@ function NotificationPoller({ userName }: { userName: string | null }) {
 
 function App() {
   const [userName, setUserName] = useState<string | null>(null)
+  const [userRole, setUserRole] = useState<string | null>(null)
+  const [userImageUrl, setUserImageUrl] = useState<string | null>(null)
 
   // Load user from localStorage on mount
   useEffect(() => {
     const savedUser = localStorage.getItem('userName')
+    const savedRole = localStorage.getItem('userRole')
+    const savedImageUrl = localStorage.getItem('userImageUrl')
     if (savedUser) {
       setUserName(savedUser)
+    }
+    if (savedRole) {
+      setUserRole(savedRole)
+    }
+    if (savedImageUrl) {
+      setUserImageUrl(savedImageUrl)
     }
   }, [])
 
@@ -169,10 +180,22 @@ function App() {
     } else {
       localStorage.removeItem('userName')
     }
-  }, [userName])
+    if (userRole) {
+      localStorage.setItem('userRole', userRole)
+    } else {
+      localStorage.removeItem('userRole')
+    }
+    if (userImageUrl) {
+      localStorage.setItem('userImageUrl', userImageUrl)
+    } else {
+      localStorage.removeItem('userImageUrl')
+    }
+  }, [userName, userRole, userImageUrl])
 
-  const handleSignIn = (username: string) => {
+  const handleSignIn = (username: string, role?: string, imageUrl?: string) => {
     setUserName(username)
+    setUserRole(role || null)
+    setUserImageUrl(imageUrl || null)
   }
 
   return (
@@ -204,7 +227,7 @@ function App() {
           path="/hub" 
           element={
             userName ? (
-              <HubScreen userName={userName} />
+              <HubScreen userName={userName} userRole={userRole} userImageUrl={userImageUrl} />
             ) : (
               <Navigate to="/signin" replace />
             )
@@ -235,6 +258,16 @@ function App() {
           element={
             userName ? (
               <ExitInspectionsScreen userName={userName} />
+            ) : (
+              <Navigate to="/signin" replace />
+            )
+          } 
+        />
+        <Route 
+          path="/cleaning-inspections" 
+          element={
+            userName ? (
+              <CleaningInspectionsScreen userName={userName} />
             ) : (
               <Navigate to="/signin" replace />
             )

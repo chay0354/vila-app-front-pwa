@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { API_BASE_URL } from '../apiConfig'
-import OptionCard from '../components/OptionCard'
 import './HubScreen.css'
 
 type Order = {
@@ -13,9 +12,11 @@ type Order = {
 
 type HubScreenProps = {
   userName: string
+  userRole?: string | null
+  userImageUrl?: string | null
 }
 
-function HubScreen({ userName }: HubScreenProps) {
+function HubScreen({ userName, userRole, userImageUrl }: HubScreenProps) {
   const navigate = useNavigate()
   const [orders, setOrders] = useState<Order[]>([])
 
@@ -82,146 +83,114 @@ function HubScreen({ userName }: HubScreenProps) {
           </div>
         </div>
 
-        <div className="hub-progress-section">
-          <h2 className="hub-section-title">סטטוס תשלומים</h2>
-          <div className="hub-progress-card">
-            <div className="hub-progress-info">
-              <span className="hub-progress-label">שולם: ₪{totals.totalPaid.toLocaleString('he-IL')}</span>
-              <span className="hub-progress-percent">{paymentPercent}%</span>
+        <div className="hub-welcome-section">
+          <div className="hub-welcome-card">
+            <div className="hub-welcome-avatar">
+              {userImageUrl ? (
+                <img src={userImageUrl} alt={userName} className="hub-welcome-avatar-image" />
+              ) : (
+                <div className="hub-welcome-avatar-placeholder">
+                  <span className="hub-welcome-avatar-icon">👤</span>
+                </div>
+              )}
             </div>
-            <div className="hub-progress-bar-large">
-              <div
-                className="hub-progress-fill-large"
-                style={{ width: `${paymentPercent}%` }}
-              />
-            </div>
-            <div className="hub-progress-note">
-              מתוך ₪{totalRevenue.toLocaleString('he-IL')} סה״כ
+            <div className="hub-welcome-content">
+              <h2 className="hub-welcome-title">שלום {userName}</h2>
+              <p className="hub-welcome-subtitle">ברוך הבא למערכת הניהול</p>
             </div>
           </div>
         </div>
 
         <div className="hub-quick-actions">
-          <h2 className="hub-section-title">פעולות מהירות</h2>
+          <h2 className="hub-section-title">אפשרויות</h2>
           <div className="hub-quick-actions-row">
+            {userRole === 'מנהל' && (
+              <button
+                className="hub-quick-action-btn hub-quick-action-blue"
+                onClick={() => navigate('/orders')}
+                type="button"
+              >
+                <span className="hub-quick-action-icon">📑</span>
+                <span className="hub-quick-action-text">הזמנות</span>
+              </button>
+            )}
             <button
-              className="hub-quick-action-btn hub-quick-action-blue"
-              onClick={() => navigate('/orders')}
-              type="button"
-            >
-              <span className="hub-quick-action-icon">📑</span>
-              <span className="hub-quick-action-text">הזמנות</span>
-            </button>
-            <button
-              className="hub-quick-action-btn hub-quick-action-green"
+              className="hub-quick-action-btn hub-quick-action-orange"
               onClick={() => navigate('/exit-inspections')}
               type="button"
             >
               <span className="hub-quick-action-icon">🧹</span>
-              <span className="hub-quick-action-text">ביקורת</span>
+              <span className="hub-quick-action-text">ביקורת יציאה</span>
             </button>
             <button
-              className="hub-quick-action-btn hub-quick-action-orange"
+              className="hub-quick-action-btn hub-quick-action-lime"
+              onClick={() => navigate('/cleaning-inspections')}
+              type="button"
+            >
+              <span className="hub-quick-action-icon">✨</span>
+              <span className="hub-quick-action-text">ביקורת ניקיון</span>
+            </button>
+            <button
+              className="hub-quick-action-btn hub-quick-action-purple"
+              onClick={() => navigate('/warehouse')}
+              type="button"
+            >
+              <span className="hub-quick-action-icon">📦</span>
+              <span className="hub-quick-action-text">מחסן</span>
+            </button>
+            <button
+              className="hub-quick-action-btn hub-quick-action-green"
               onClick={() => navigate('/maintenance')}
               type="button"
             >
               <span className="hub-quick-action-icon">🛠️</span>
               <span className="hub-quick-action-text">תחזוקה</span>
             </button>
+            {userRole === 'מנהל' && (
+              <>
+                <button
+                  className="hub-quick-action-btn hub-quick-action-indigo"
+                  onClick={() => navigate('/reports')}
+                  type="button"
+                >
+                  <span className="hub-quick-action-icon">📊</span>
+                  <span className="hub-quick-action-text">דוחות</span>
+                </button>
+                <button
+                  className="hub-quick-action-btn hub-quick-action-cyan"
+                  onClick={() => navigate('/invoices')}
+                  type="button"
+                >
+                  <span className="hub-quick-action-icon">🧾</span>
+                  <span className="hub-quick-action-text">חשבוניות</span>
+                </button>
+              </>
+            )}
+            <button
+              className="hub-quick-action-btn hub-quick-action-yellow"
+              onClick={() => navigate('/chat')}
+              type="button"
+            >
+              <span className="hub-quick-action-icon">💬</span>
+              <span className="hub-quick-action-text">צ׳אט פנימי</span>
+            </button>
+            <button
+              className="hub-quick-action-btn hub-quick-action-pink"
+              onClick={() => navigate('/attendance')}
+              type="button"
+            >
+              <span className="hub-quick-action-icon">⏱️</span>
+              <span className="hub-quick-action-text">שעון נוכחות</span>
+            </button>
+            <button
+              className="hub-quick-action-btn hub-quick-action-teal"
+              onClick={() => navigate('/cleaning-schedule')}
+              type="button"
+            >
+              <span className="hub-quick-action-icon">🧹</span>
+              <span className="hub-quick-action-text">סידורי ניקיון</span>
+            </button>
           </div>
-        </div>
-
-        <div className="hub-option-grid">
-          <OptionCard
-            title="הזמנות"
-            icon="📑"
-            accent="#38bdf8"
-            details={[
-              'רשימת הזמנות מלאה, פרטי אורח ומספר יחידה',
-              'עדכון סכום ששולם, אופן תשלום וסטטוס',
-              'סיכום מלא והוצאות כולל יצוא לאקסל',
-            ]}
-            cta="פתח הזמנות"
-            onPress={() => navigate('/orders')}
-          />
-          <OptionCard
-            title="ביקורת יציאה"
-            icon="🧹"
-            accent="#f97316"
-            details={[
-              'משימות ניקיון לאחר עזיבה',
-              'סטטוסים: צריך ביקורת / בביצוע / הושלם',
-            ]}
-            cta="פתח ביקורות"
-            onPress={() => navigate('/exit-inspections')}
-          />
-          <OptionCard
-            title="מחסן"
-            icon="📦"
-            accent="#a78bfa"
-            details={[
-              'רשימת פריטי מלאי: מצעים, מוצרי ניקיון, ציוד מתכלה',
-              'יצירת הזמנות פנימיות וצפייה בסטטוס',
-              'הזמנות עתידיות ובחירת מתחם',
-            ]}
-            cta="פתח מחסן"
-            onPress={() => navigate('/warehouse')}
-          />
-          <OptionCard
-            title="תחזוקה"
-            icon="🛠️"
-            accent="#22c55e"
-            details={[
-              'רשימת יחידות נופש והמצב התחזוקתי',
-              'משימות תחזוקה עם תמונות וסטטוס',
-              'יצירת משימות חדשות ועדכון קיימות',
-            ]}
-            cta="פתח תחזוקה"
-            onPress={() => navigate('/maintenance')}
-          />
-          <OptionCard
-            title="דוחות"
-            icon="דוח"
-            accent="#6366f1"
-            details={[
-              'דוח הזמנות, ביקורות, מחסן, תחזוקה ונוכחות',
-              'הכנסות/שולם/הוצאות מהשרת',
-            ]}
-            cta="פתח דוחות"
-            onPress={() => navigate('/reports')}
-          />
-          <OptionCard
-            title="חשבוניות"
-            icon="🧾"
-            accent="#0ea5e9"
-            details={['העלאת PDF/תמונה', 'OCR לזיהוי ספק, תאריך וסכום']}
-            cta="פתח חשבוניות"
-            onPress={() => navigate('/invoices')}
-          />
-          <OptionCard
-            title="צ׳אט פנימי"
-            icon="💬"
-            accent="#eab308"
-            details={['תקשורת צוות והתראות']}
-            cta="פתח צ'אט"
-            onPress={() => navigate('/chat')}
-          />
-          <OptionCard
-            title="שעון נוכחות"
-            icon="⏱️"
-            accent="#ec4899"
-            details={['התחלה וסיום עבודה', 'מעקב שעות עבודה']}
-            cta="פתח שעון נוכחות"
-            onPress={() => navigate('/attendance')}
-          />
-          <OptionCard
-            title="סידורי ניקיון"
-            icon="🧹"
-            accent="#10b981"
-            details={['לוח זמנים לניקיון', 'הוספת מנקים ושעות עבודה']}
-            cta="פתח סידורי ניקיון"
-            onPress={() => navigate('/cleaning-schedule')}
-          />
         </div>
       </div>
     </div>

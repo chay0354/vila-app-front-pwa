@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { API_BASE_URL } from '../apiConfig'
 import { InventoryOrder, InventoryOrderItem } from '../types/warehouse'
+import { UNIT_CATEGORIES, UNIT_NAMES } from '../types/orders'
 import './NewWarehouseOrderScreen.css'
 
 type ProductEntry = {
@@ -19,6 +20,7 @@ function NewWarehouseOrderScreen({}: NewWarehouseOrderScreenProps) {
   const [products, setProducts] = useState<ProductEntry[]>([
     { id: Date.now().toString(), name: '', quantity: '' }
   ])
+  const [selectedHotel, setSelectedHotel] = useState<string>('')
   const [saving, setSaving] = useState(false)
 
   const handleAddProduct = () => {
@@ -71,8 +73,9 @@ function NewWarehouseOrderScreen({}: NewWarehouseOrderScreenProps) {
       const newOrder: InventoryOrder = {
         id: '',
         orderDate: orderDate,
-        status: 'ממתין לאישור',
+        status: 'מחכה להשלמת תשלום',
         orderType: 'הזמנה כללית',
+        unitNumber: selectedHotel || undefined,
         items: orderItems,
       }
 
@@ -123,6 +126,27 @@ function NewWarehouseOrderScreen({}: NewWarehouseOrderScreenProps) {
       </div>
 
       <div className="new-warehouse-order-scroll">
+        <div className="new-warehouse-order-hotel-selector">
+          <label className="new-warehouse-order-hotel-label">בחר מלון/יחידה:</label>
+          <select
+            className="new-warehouse-order-hotel-select"
+            value={selectedHotel}
+            onChange={(e) => setSelectedHotel(e.target.value)}
+            dir="rtl"
+          >
+            <option value="">-- בחר מלון/יחידה --</option>
+            {UNIT_CATEGORIES.map((category) => (
+              <optgroup key={category.name} label={category.name}>
+                {category.units.map((unit) => (
+                  <option key={unit} value={unit}>
+                    {unit}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </div>
+
         <div className="new-warehouse-order-products-list">
           {products.map((product) => (
             <div key={product.id} className="new-warehouse-order-product-item">

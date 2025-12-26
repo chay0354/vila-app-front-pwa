@@ -156,7 +156,7 @@ function ReportsScreen({}: ReportsScreenProps) {
       if (!res.ok) return
       const data = await res.json()
       const list = (data || []).map((o: any): InventoryOrder => {
-        const status = (o.status ?? 'ממתין לאישור') as InventoryOrder['status']
+        const status = (o.status ?? 'מחכה להשלמת תשלום') as InventoryOrder['status']
         const orderType = (o.order_type ?? o.orderType ?? 'הזמנה כללית') as InventoryOrder['orderType']
         if (o.items && Array.isArray(o.items)) {
           return {
@@ -1062,24 +1062,12 @@ function ReportsScreen({}: ReportsScreenProps) {
                     <div className="reports-unit-kpi-value">{inventoryOrders.length}</div>
                   </div>
                   <div className="reports-unit-kpi-item">
-                    <div className="reports-unit-kpi-label">ממתין לאישור</div>
-                    <div className="reports-unit-kpi-value">{inventoryOrdersByStatus['ממתין לאישור'] || 0}</div>
+                    <div className="reports-unit-kpi-label">שולם מלא</div>
+                    <div className="reports-unit-kpi-value">{inventoryOrdersByStatus['שולם מלא'] || 0}</div>
                   </div>
                   <div className="reports-unit-kpi-item">
-                    <div className="reports-unit-kpi-label">מאושר</div>
-                    <div className="reports-unit-kpi-value">{inventoryOrdersByStatus['מאושר'] || 0}</div>
-                  </div>
-                  <div className="reports-unit-kpi-item">
-                    <div className="reports-unit-kpi-label">בהזמנה</div>
-                    <div className="reports-unit-kpi-value">{inventoryOrdersByStatus['בהזמנה'] || 0}</div>
-                  </div>
-                  <div className="reports-unit-kpi-item">
-                    <div className="reports-unit-kpi-label">התקבל</div>
-                    <div className="reports-unit-kpi-value">{inventoryOrdersByStatus['התקבל'] || 0}</div>
-                  </div>
-                  <div className="reports-unit-kpi-item">
-                    <div className="reports-unit-kpi-label">בוטל</div>
-                    <div className="reports-unit-kpi-value">{inventoryOrdersByStatus['בוטל'] || 0}</div>
+                    <div className="reports-unit-kpi-label">מחכה להשלמת תשלום</div>
+                    <div className="reports-unit-kpi-value">{inventoryOrdersByStatus['מחכה להשלמת תשלום'] || 0}</div>
                   </div>
                 </div>
 

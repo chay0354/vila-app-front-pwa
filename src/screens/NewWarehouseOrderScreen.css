@@ -18,9 +18,9 @@
 .new-warehouse-order-back-button {
   padding: 8px 12px;
   border-radius: 10px;
-  background-color: #e2e8f0;
-  border: 1px solid #cbd5e1;
-  color: #475569;
+  background-color: #ef4444;
+  border: 1px solid #dc2626;
+  color: #ffffff;
   font-weight: 700;
   font-size: 14px;
   cursor: pointer;
@@ -42,6 +42,42 @@
 .new-warehouse-order-scroll {
   padding: 18px;
   padding-bottom: 40px;
+}
+
+.new-warehouse-order-hotel-selector {
+  margin-bottom: 20px;
+  background-color: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.new-warehouse-order-hotel-label {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  text-align: right;
+  margin-bottom: 10px;
+}
+
+.new-warehouse-order-hotel-select {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 15px;
+  text-align: right;
+  background-color: #fff;
+  color: #0f172a;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.new-warehouse-order-hotel-select:focus {
+  outline: none;
+  border-color: #3b82f6;
 }
 
 .new-warehouse-order-products-list {
@@ -74,6 +110,8 @@
   border: 1px solid #cbd5e1;
   font-size: 15px;
   text-align: right;
+  background-color: #fff;
+  color: #0f172a;
   box-sizing: border-box;
 }
 
@@ -96,6 +134,8 @@
   border: 1px solid #cbd5e1;
   font-size: 15px;
   text-align: center;
+  background-color: #fff;
+  color: #0f172a;
   box-sizing: border-box;
 }
 

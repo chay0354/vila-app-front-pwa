@@ -20,6 +20,7 @@ export type InspectionMission = {
   tasks: InspectionTask[]
 }
 
+// Default tasks for exit inspections
 export const defaultInspectionTasks: InspectionTask[] = [
   // טיפול ברכיה
   { id: '1', name: 'לשים כלור בבריכה', completed: false },
@@ -50,5 +51,44 @@ export const defaultInspectionTasks: InspectionTask[] = [
   // כיבוי ונעילה
   { id: '23', name: 'כיבוי אורות פנים וחוץ הוילה', completed: false },
   { id: '24', name: 'לנעול דלת ראשית', completed: false },
+]
+
+// Default tasks for cleaning inspections
+export const defaultCleaningInspectionTasks: InspectionTask[] = [
+  // מטבח (Kitchen)
+  { id: '1', name: 'מכונת קפה, לנקות ולהחליף פילטר קפה', completed: false },
+  { id: '2', name: 'קפה תה סוכר וכו׳', completed: false },
+  { id: '3', name: 'להעביר סמרטוט במתקן מים', completed: false },
+  { id: '4', name: 'מקרר – בפנים ובחוץ', completed: false },
+  { id: '5', name: 'תנור – בפנים ובחוץ', completed: false },
+  { id: '6', name: 'כיריים וגריל', completed: false },
+  { id: '7', name: 'מיקרו', completed: false },
+  { id: '8', name: 'כיור', completed: false },
+  { id: '9', name: 'כלים – לשטוף ליבש ולהחזיר לארון', completed: false },
+  { id: '10', name: 'לבדוק שכל הכלים נקיים', completed: false },
+  { id: '11', name: 'לבדוק שיש לפחות 20 כוסות אוכל מכל דבר', completed: false },
+  { id: '12', name: 'ארונות מטבח – לפתוח ולראות שאין דברים להוציא דברים לא קשורים', completed: false },
+  { id: '13', name: 'להעביר סמרטוט על הדלתות מטבח בחוץ', completed: false },
+  { id: '14', name: 'להעביר סמרטוט על הפח ולראות שנקי', completed: false },
+  { id: '15', name: 'פלטת שבת ומיחם מים חמים – לראות שאין אבן', completed: false },
+  { id: '16', name: 'סכו״ם, כלים, סמרטוט, סקוֹץ׳ חדשים לאורחים', completed: false },
+  { id: '17', name: 'סבון', completed: false },
+  // סלון (Living Room)
+  { id: '18', name: 'סלון שטיפה יסודית גם מתחת לספות ולשולחן, להזיז כורסאות ולבדוק שאין פירורים של אוכל', completed: false },
+  { id: '19', name: 'שולחן אוכל וספסלים (לנקות בשפריצר ולהעביר סמרטוט)', completed: false },
+  { id: '20', name: 'סלון – לנגב אבק ולהעביר סמרטוט גם על הספה. כיריות לנקות לסדר יפה', completed: false },
+  { id: '21', name: 'שולחן אוכל וספסלים – להעביר סמרטוט נקי עם תריס', completed: false },
+  { id: '22', name: 'חלונות ותריסים – עם ספריי חלונות וסמרטוט נקי. שלא יהיו סימנים. מסילות לנקות', completed: false },
+  // מסדרון (Hallway)
+  { id: '23', name: 'מסדרון – לנגב בחוץ שטיחים. לנקות מסילות בחלונות. לנקות חלונות', completed: false },
+  // חצר (Yard)
+  { id: '24', name: 'טיפול ברזים וניקוי', completed: false },
+  { id: '25', name: 'להשקות עציצים בכל המתחם', completed: false },
+  { id: '26', name: 'פינת מנגל – לרוקן פחים ולנקות רשת, וכל אזור המנגל', completed: false },
+  { id: '27', name: 'לנקות דשא ולסדר פינות ישיבה', completed: false },
+  { id: '28', name: 'שולחן חוץ – להעביר סמרטוט עם חומר. כיסאות נקיים', completed: false },
+  { id: '29', name: 'שטיפה לרצפה בחוץ', completed: false },
+  { id: '30', name: 'לרוקן את הפחים, לשים שקית חדשה', completed: false },
+  { id: '31', name: 'להעביר סמרטוט על הפחים ולשים שקיות', completed: false },
 ]
 

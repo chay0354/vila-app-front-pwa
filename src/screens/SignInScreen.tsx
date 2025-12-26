@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { API_BASE_URL } from '../apiConfig'
 import './SignInScreen.css'
 
 type SignInScreenProps = {
   mode?: 'signin' | 'signup'
-  onSignIn: (username: string) => void
+  onSignIn: (username: string, role?: string, imageUrl?: string) => void
 }
 
 function SignInScreen({ mode = 'signin', onSignIn }: SignInScreenProps) {
@@ -13,8 +13,32 @@ function SignInScreen({ mode = 'signin', onSignIn }: SignInScreenProps) {
   const [name, setName] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [role, setRole] = useState<'עובד תחזוקה' | 'מנהל'>('עובד תחזוקה')
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        setError('התמונה גדולה מדי. אנא בחר תמונה קטנה מ-5MB')
+        return
+      }
+      if (!file.type.startsWith('image/')) {
+        setError('אנא בחר קובץ תמונה בלבד')
+        return
+      }
+      setImageFile(file)
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
 
   const handleSign = async () => {
     if (!name.trim() || !password.trim()) {
@@ -34,6 +58,20 @@ function SignInScreen({ mode = 'signin', onSignIn }: SignInScreenProps) {
     setIsLoading(true)
 
     try {
+      let imageUrl: string | undefined = undefined
+      
+      // If signup and image selected, convert to base64
+      if (mode === 'signup' && imageFile) {
+        const reader = new FileReader()
+        imageUrl = await new Promise<string>((resolve, reject) => {
+          reader.onloadend = () => {
+            resolve(reader.result as string)
+          }
+          reader.onerror = reject
+          reader.readAsDataURL(imageFile)
+        })
+      }
+
       const endpoint = mode === 'signup' ? '/api/auth/signup' : '/api/auth/login'
       const url = `${API_BASE_URL}${endpoint}`
       console.log('Attempting auth:', { mode, url, username: name.trim() })
@@ -44,6 +82,7 @@ function SignInScreen({ mode = 'signin', onSignIn }: SignInScreenProps) {
         body: JSON.stringify({
           username: name.trim(),
           password: password,
+          ...(mode === 'signup' && { role, image_url: imageUrl }),
         }),
       })
 
@@ -70,10 +109,16 @@ function SignInScreen({ mode = 'signin', onSignIn }: SignInScreenProps) {
       }
 
       // Success - set user and navigate to hub
-      onSignIn(data.username || name.trim())
+      onSignIn(
+        data.username || name.trim(),
+        data.role,
+        data.image_url
+      )
       setName('')
       setPassword('')
       setConfirmPassword('')
+      setImagePreview(null)
+      setImageFile(null)
       navigate('/hub')
     } catch (err: any) {
       console.error('Auth error:', err)
@@ -118,17 +163,71 @@ function SignInScreen({ mode = 'signin', onSignIn }: SignInScreenProps) {
           </div>
           
           {mode === 'signup' && (
-            <div className="signin-field">
-              <label className="signin-label">אישור סיסמה</label>
-              <input
-                className="signin-input"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="••••••"
-                dir="rtl"
-              />
-            </div>
+            <>
+              <div className="signin-field">
+                <label className="signin-label">אישור סיסמה</label>
+                <input
+                  className="signin-input"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="••••••"
+                  dir="rtl"
+                />
+              </div>
+              
+              <div className="signin-field">
+                <label className="signin-label">תפקיד</label>
+                <select
+                  className="signin-input"
+                  value={role}
+                  onChange={(e) => setRole(e.target.value as 'עובד תחזוקה' | 'מנהל')}
+                  dir="rtl"
+                >
+                  <option value="עובד תחזוקה">עובד תחזוקה</option>
+                  <option value="מנהל">מנהל</option>
+                </select>
+              </div>
+              
+              <div className="signin-field">
+                <label className="signin-label">תמונת פרופיל</label>
+                <div className="signin-image-upload">
+                  {imagePreview ? (
+                    <div className="signin-image-preview">
+                      <img src={imagePreview} alt="Preview" />
+                      <button
+                        type="button"
+                        className="signin-image-remove"
+                        onClick={() => {
+                          setImagePreview(null)
+                          setImageFile(null)
+                          if (fileInputRef.current) {
+                            fileInputRef.current.value = ''
+                          }
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="signin-image-upload-btn"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      + בחר תמונה
+                    </button>
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageSelect}
+                    style={{ display: 'none' }}
+                  />
+                </div>
+              </div>
+            </>
           )}
           
           {error && <p className="signin-error">{error}</p>}

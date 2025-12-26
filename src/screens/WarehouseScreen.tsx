@@ -12,7 +12,6 @@ function WarehouseScreen({}: WarehouseScreenProps) {
   const navigate = useNavigate()
   const [orders, setOrders] = useState<InventoryOrder[]>([])
   const [expandedOrderGroupId, setExpandedOrderGroupId] = useState<string | null>(null)
-  const [statusChangeGroupId, setStatusChangeGroupId] = useState<string | null>(null)
 
   useEffect(() => {
     loadInventoryOrders()
@@ -25,7 +24,7 @@ function WarehouseScreen({}: WarehouseScreenProps) {
       const data = await res.json()
 
       const list = (data || []).map((o: any): InventoryOrder => {
-        const status = (o.status ?? 'ממתין לאישור') as InventoryOrder['status']
+        const status = (o.status ?? 'מחכה להשלמת תשלום') as InventoryOrder['status']
         const orderType = (o.order_type ?? o.orderType ?? 'הזמנה כללית') as InventoryOrder['orderType']
 
         if (o.items && Array.isArray(o.items)) {
@@ -68,7 +67,16 @@ function WarehouseScreen({}: WarehouseScreenProps) {
   const groupedOrders = useMemo(() => {
     const groups: Record<string, InventoryOrder[]> = {}
     orders.forEach(order => {
-      groups[order.id] = [order]
+      // Group by hotel (unitNumber) or 'ללא מלון' if no hotel
+      const hotelKey = order.unitNumber || 'ללא מלון'
+      if (!groups[hotelKey]) {
+        groups[hotelKey] = []
+      }
+      groups[hotelKey].push(order)
+    })
+    // Sort orders within each group by date (newest first)
+    Object.keys(groups).forEach(key => {
+      groups[key].sort((a, b) => (b.orderDate || '').localeCompare(a.orderDate || ''))
     })
     return groups
   }, [orders])
@@ -81,49 +89,6 @@ function WarehouseScreen({}: WarehouseScreenProps) {
     }
   }
 
-  const handleStatusChange = async (groupId: string, newStatus: InventoryOrder['status']) => {
-    const groupOrders = groupedOrders[groupId] || []
-    if (groupOrders.length > 0) {
-      const order = groupOrders[0]
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/inventory/orders/${order.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            status: newStatus,
-            delivery_date: order.deliveryDate,
-          }),
-        })
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({ detail: 'שגיאה לא ידועה' }))
-          alert(errorData.detail || 'לא ניתן לעדכן את ההזמנה')
-          return
-        }
-        await loadInventoryOrders()
-        setStatusChangeGroupId(null)
-      } catch (err: any) {
-        console.error('Error updating inventory order:', err)
-        alert(err.message || 'אירעה שגיאה בעדכון ההזמנה')
-      }
-    }
-  }
-
-  const getStatusColor = (status: InventoryOrder['status']) => {
-    switch (status) {
-      case 'ממתין לאישור':
-        return '#f59e0b'
-      case 'מאושר':
-        return '#3b82f6'
-      case 'בהזמנה':
-        return '#8b5cf6'
-      case 'התקבל':
-        return '#22c55e'
-      case 'בוטל':
-        return '#ef4444'
-      default:
-        return '#64748b'
-    }
-  }
 
   return (
     <div className="warehouse-screen-container">
@@ -159,14 +124,18 @@ function WarehouseScreen({}: WarehouseScreenProps) {
             </div>
           ) : (
             <div className="warehouse-screen-orders-list">
-              {Object.entries(groupedOrders).map(([groupId, groupOrders]) => {
-                const order = groupOrders[0]
-                const isExpanded = expandedOrderGroupId === groupId
-                const isChangingStatus = statusChangeGroupId === groupId
-                const itemCount = order.items?.length || 0
+              {Object.entries(groupedOrders).map(([hotelName, groupOrders]) => (
+                <div key={hotelName} className="warehouse-screen-hotel-group">
+                  <h3 className="warehouse-screen-hotel-group-title">
+                    {hotelName} ({groupOrders.length} {groupOrders.length === 1 ? 'הזמנה' : 'הזמנות'})
+                  </h3>
+                  {groupOrders.map((order) => {
+                    const groupId = order.id
+                    const isExpanded = expandedOrderGroupId === groupId
+                    const itemCount = order.items?.length || 0
 
-                return (
-                  <div key={groupId} className="warehouse-screen-order-card">
+                    return (
+                      <div key={groupId} className="warehouse-screen-order-card">
                     <button
                       onClick={() => handleToggleOrder(groupId)}
                       className="warehouse-screen-order-card-header"
@@ -206,55 +175,18 @@ function WarehouseScreen({}: WarehouseScreenProps) {
                           </div>
                         )}
                       </div>
-                      <div
-                        className="warehouse-screen-order-status-badge"
-                        style={{ backgroundColor: getStatusColor(order.status) + '22' }}
-                      >
-                        <span
-                          className="warehouse-screen-order-status-text"
-                          style={{ color: getStatusColor(order.status) }}
-                        >
-                          {order.status}
-                        </span>
-                      </div>
                     </button>
 
                     <div className="warehouse-screen-order-card-actions">
                       <div className="warehouse-screen-order-type-badge">
                         <span className="warehouse-screen-order-type-text">{order.orderType}</span>
                       </div>
-                      {!isChangingStatus ? (
-                        <button
-                          onClick={() => setStatusChangeGroupId(groupId)}
-                          className="warehouse-screen-change-status-button"
-                        >
-                          שינוי סטטוס
-                        </button>
-                      ) : (
-                        <div className="warehouse-screen-status-change-buttons">
-                          {(['ממתין לאישור', 'מאושר', 'בהזמנה', 'התקבל', 'בוטל'] as InventoryOrder['status'][]).map(status => (
-                            <button
-                              key={status}
-                              onClick={() => handleStatusChange(groupId, status)}
-                              className={`warehouse-screen-status-option-button ${
-                                order.status === status ? 'active' : ''
-                              }`}
-                            >
-                              {status}
-                            </button>
-                          ))}
-                          <button
-                            onClick={() => setStatusChangeGroupId(null)}
-                            className="warehouse-screen-cancel-status-button"
-                          >
-                            ביטול
-                          </button>
-                        </div>
-                      )}
                     </div>
                   </div>
-                )
-              })}
+                    )
+                  })}
+                </div>
+              ))}
             </div>
           )}
         </div>

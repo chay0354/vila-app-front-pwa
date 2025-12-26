@@ -2,65 +2,65 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { API_BASE_URL } from '../apiConfig'
 import { Order } from '../types/orders'
-import { InspectionMission, InspectionTask, defaultInspectionTasks } from '../types/inspections'
+import { InspectionMission, InspectionTask, defaultCleaningInspectionTasks } from '../types/inspections'
 import { computeInspectionStatus } from '../utils/inspectionUtils'
 import InspectionMissionCard from '../components/InspectionMissionCard'
-import './ExitInspectionsScreen.css'
+import './CleaningInspectionsScreen.css'
 
-type ExitInspectionsScreenProps = {
+type CleaningInspectionsScreenProps = {
   userName: string
 }
 
-function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
+function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
   const navigate = useNavigate()
   const [orders, setOrders] = useState<Order[]>([])
   const [inspectionMissions, setInspectionMissions] = useState<InspectionMission[]>([])
 
   useEffect(() => {
-    // Load orders first, then sync and load inspections from backend
-    // Sync happens every time the screen opens to ensure inspections match orders' leaving dates
+    // Load orders first, then sync and load cleaning inspections from backend
     // This ensures backend data (with completion status) is loaded before any derivation
+    // Sync happens every time the screen opens to ensure cleaning inspections match orders
     const initialize = async () => {
       console.log('Initializing: Loading orders first...')
       await loadOrders()
-      console.log('Orders loaded, now syncing and loading inspections from backend...')
-      await loadInspections() // This will sync first, then load
+      console.log('Orders loaded, now syncing and loading cleaning inspections from backend...')
+      await loadInspections() // This will sync and then load
       console.log('Initialization complete')
     }
     initialize()
   }, [])
 
-  // Sync inspections with orders - ensure every departure date has an inspection and no more
+  // Sync cleaning inspections with orders - ensure every departure date has a cleaning inspection and no more
   const syncInspectionsWithOrders = async () => {
     try {
-      // Call backend sync endpoint which handles adding and removing inspections
+      // Call backend sync endpoint which handles adding and removing cleaning inspections
       // The backend will fetch orders itself, so we don't need to check orders.length
-      const res = await fetch(`${API_BASE_URL}/api/inspections/sync`, {
+      const res = await fetch(`${API_BASE_URL}/api/cleaning-inspections/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       })
       if (res.ok) {
-        console.log('Synced inspections with orders via backend')
+        console.log('Synced cleaning inspections with orders via backend')
       } else {
         console.error('Sync failed with status:', res.status)
       }
     } catch (err) {
-      console.error('Error syncing inspections with orders:', err)
+      console.error('Error syncing cleaning inspections with orders:', err)
     }
   }
 
-  // Load inspections from backend - ALWAYS read from inspections table
+  // Load cleaning inspections from backend - ALWAYS read from cleaning_inspections table
   const loadInspections = async () => {
-    console.log('Loading inspections from backend...')
+    console.log('Loading cleaning inspections from backend...')
     
-    // First, sync inspections with orders to ensure all departure dates have inspections
+    // First, sync cleaning inspections with orders to ensure all departure dates have cleaning inspections
     await syncInspectionsWithOrders()
     
     try {
-      const res = await fetch(`${API_BASE_URL}/api/inspections`)
+      const res = await fetch(`${API_BASE_URL}/api/cleaning-inspections`)
       if (res.ok) {
         const data = await res.json()
-        console.log('Backend returned', data?.length || 0, 'inspections')
+        console.log('Backend returned', data?.length || 0, 'cleaning inspections')
         
         // Group by departure date - one mission per departure date
         const missionsByDate = new Map<string, InspectionMission>()
@@ -72,17 +72,17 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
             completed: Boolean(t.completed),
           }))
           
-          console.log('Loaded inspection:', insp.id, 'with', backendTasks.length, 'tasks from backend')
+          console.log('Loaded cleaning inspection:', insp.id, 'with', backendTasks.length, 'tasks from backend')
           
           // Merge backend tasks with default tasks
           let tasks: InspectionTask[] = []
           if (backendTasks.length === 0) {
-            tasks = defaultInspectionTasks.map(t => ({ ...t }))
+            tasks = defaultCleaningInspectionTasks.map(t => ({ ...t }))
           } else {
             const tasksMapById = new Map(backendTasks.map((t: any) => [String(t.id), t]))
             const tasksMapByName = new Map(backendTasks.map((t: any) => [String(t.name).trim().toLowerCase(), t]))
             
-            tasks = defaultInspectionTasks.map(defaultTask => {
+            tasks = defaultCleaningInspectionTasks.map(defaultTask => {
               let backendTask: any = tasksMapById.get(String(defaultTask.id))
               if (!backendTask) {
                 const defaultTaskName = String(defaultTask.name).trim().toLowerCase()
@@ -123,19 +123,19 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
         
         // Convert to array (one per departure date)
         const finalMissions = Array.from(missionsByDate.values())
-        console.log('Setting missions (grouped by departure date):', finalMissions.length, 'missions')
+        console.log('Setting cleaning missions (grouped by departure date):', finalMissions.length, 'missions')
         finalMissions.forEach(m => {
           const completedCount = m.tasks.filter(t => t.completed).length
-          console.log(`  Mission ${m.id} (${m.departureDate}): ${completedCount}/${m.tasks.length} tasks completed`)
+          console.log(`  Cleaning mission ${m.id} (${m.departureDate}): ${completedCount}/${m.tasks.length} tasks completed`)
         })
         
         hasLoadedFromBackend.current = true
         setInspectionMissions(finalMissions)
       } else {
-        console.warn('Failed to load inspections:', res.status)
+        console.warn('Failed to load cleaning inspections:', res.status)
       }
     } catch (err) {
-      console.error('Error loading inspections from backend:', err)
+      console.error('Error loading cleaning inspections from backend:', err)
     }
   }
 
@@ -167,7 +167,7 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
           if (existing?.tasks?.length) {
             // Merge existing tasks with default tasks to ensure all are present
             const tasksMap = new Map(existing.tasks.map(t => [t.id, t]))
-            tasks = defaultInspectionTasks.map(defaultTask => {
+            tasks = defaultCleaningInspectionTasks.map(defaultTask => {
               const existingTask = tasksMap.get(defaultTask.id)
               if (existingTask) {
                 // Use existing task (preserves completion status)
@@ -179,11 +179,11 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
             })
           } else {
             // No existing tasks, use all default tasks
-            tasks = defaultInspectionTasks.map(t => ({ ...t }))
+            tasks = defaultCleaningInspectionTasks.map(t => ({ ...t }))
           }
           
           const mission: InspectionMission = {
-            id: existing?.id || `INSP-${o.id}`,
+            id: existing?.id || `CLEAN-${o.id}`,
             orderId: o.id,
             unitNumber: o.unitNumber,
             guestName: o.guestName,
@@ -201,7 +201,7 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
       if (newMissions.length > 0) {
         newMissions.forEach(async (mission) => {
           try {
-            await fetch(`${API_BASE_URL}/api/inspections`, {
+            await fetch(`${API_BASE_URL}/api/cleaning-inspections`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -215,7 +215,7 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
               }),
             })
           } catch (err) {
-            console.error('Error saving new inspection to backend:', err)
+            console.error('Error saving new cleaning inspection to backend:', err)
           }
         })
       }
@@ -227,21 +227,21 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
   // Use a ref to track if we've loaded from backend to prevent overwriting
   const hasLoadedFromBackend = useRef(false)
   
-  // Sync inspections when orders change - ensure inspections table stays in sync with orders
-  // This ensures that when new orders are created or updated, inspections are automatically synced
+  // Sync cleaning inspections when orders change - ensure cleaning_inspections table stays in sync with orders
+  // This ensures that when new orders are created or updated, cleaning inspections are automatically synced
   useEffect(() => {
     if (orders.length > 0 && hasLoadedFromBackend.current) {
-      // Call backend sync endpoint to ensure all departure dates have inspections
+      // Call backend sync endpoint to ensure all departure dates have cleaning inspections
       const syncWithBackend = async () => {
         try {
-          await fetch(`${API_BASE_URL}/api/inspections/sync`, {
+          await fetch(`${API_BASE_URL}/api/cleaning-inspections/sync`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
           })
-          // Reload inspections after syncing to get the latest data from backend
+          // Reload cleaning inspections after syncing to get the latest data from backend
           await loadInspections()
         } catch (err) {
-          console.error('Error syncing inspections with backend:', err)
+          console.error('Error syncing cleaning inspections with backend:', err)
           // Fallback to local sync
           syncInspectionsWithOrders().then(() => {
             loadInspections()
@@ -282,7 +282,7 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
 
 
   const handleToggleTask = async (missionId: string, taskId: string) => {
-    console.log('=== TASK TOGGLED ===', missionId, taskId)
+    console.log('=== CLEANING TASK TOGGLED ===', missionId, taskId)
     const mission = inspectionMissions.find(m => m.id === missionId)
     if (!mission) return
 
@@ -292,8 +292,8 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
     const updatedTasks = mission.tasks.map(t =>
       t.id === taskId ? { ...t, completed: !t.completed } : t
     )
-    console.log('Task toggled:', taskId, 'Old completed:', task.completed, 'New completed:', !task.completed)
-    console.log('Updated tasks count:', updatedTasks.filter(t => t.completed).length, 'completed out of', updatedTasks.length)
+    console.log('Cleaning task toggled:', taskId, 'Old completed:', task.completed, 'New completed:', !task.completed)
+    console.log('Updated cleaning tasks count:', updatedTasks.filter(t => t.completed).length, 'completed out of', updatedTasks.length)
 
     const updatedStatus = computeInspectionStatus({ departureDate: mission.departureDate, tasks: updatedTasks })
 
@@ -308,23 +308,23 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
   }
 
   const handleSave = async (missionId: string) => {
-    console.log('=== SAVE BUTTON CLICKED ===', missionId)
+    console.log('=== CLEANING SAVE BUTTON CLICKED ===', missionId)
     // Get the latest mission from current state
     const mission = inspectionMissions.find(m => m.id === missionId)
     if (!mission) {
-      console.error('Mission not found:', missionId)
-      alert('שגיאה: לא נמצאה משימת ביקורת')
+      console.error('Cleaning mission not found:', missionId)
+      alert('שגיאה: לא נמצאה משימת ביקורת ניקיון')
       return
     }
 
     const completedCount = mission.tasks.filter(t => t.completed).length
-    console.log('Saving mission:', missionId, 'with tasks:', mission.tasks.length, 'completed:', completedCount)
-    console.log('Mission tasks before save:', mission.tasks.map(t => ({ id: t.id, name: t.name.substring(0, 20), completed: t.completed })))
+    console.log('Saving cleaning mission:', missionId, 'with tasks:', mission.tasks.length, 'completed:', completedCount)
+    console.log('Cleaning mission tasks before save:', mission.tasks.map(t => ({ id: t.id, name: t.name.substring(0, 20), completed: t.completed })))
     
     // Ensure all tasks have the correct format with boolean completed status
     // IMPORTANT: Match tasks to default tasks to ensure we use the correct IDs
     // This ensures IDs match between saves and loads
-    const defaultTasksMap = new Map(defaultInspectionTasks.map(dt => [dt.name.trim().toLowerCase(), dt]))
+    const defaultTasksMap = new Map(defaultCleaningInspectionTasks.map(dt => [dt.name.trim().toLowerCase(), dt]))
     
     const tasksToSave = mission.tasks.map(t => {
       // Find matching default task by name to get the correct ID
@@ -339,8 +339,8 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
       }
     })
     
-    console.log('Tasks to save:', tasksToSave.map(t => ({ id: t.id, name: t.name, completed: t.completed })))
-    console.log('Completed tasks count:', tasksToSave.filter(t => t.completed).length, 'out of', tasksToSave.length)
+    console.log('Cleaning tasks to save:', tasksToSave.map(t => ({ id: t.id, name: t.name, completed: t.completed })))
+    console.log('Completed cleaning tasks count:', tasksToSave.filter(t => t.completed).length, 'out of', tasksToSave.length)
 
     const payload = {
       id: mission.id,
@@ -351,12 +351,12 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
       status: mission.status,
       tasks: tasksToSave, // Use the properly formatted tasks
     }
-    console.log('Payload being sent:', JSON.stringify(payload, null, 2))
-    console.log('Payload tasks with completion:', payload.tasks.map(t => ({ id: t.id, name: t.name.substring(0, 20), completed: t.completed, completedType: typeof t.completed })))
+    console.log('Cleaning payload being sent:', JSON.stringify(payload, null, 2))
+    console.log('Cleaning payload tasks with completion:', payload.tasks.map(t => ({ id: t.id, name: t.name.substring(0, 20), completed: t.completed, completedType: typeof t.completed })))
 
-    // Save the entire mission with all tasks to backend
+    // Save the entire cleaning mission with all tasks to backend
     try {
-      const response = await fetch(`${API_BASE_URL}/api/inspections`, {
+      const response = await fetch(`${API_BASE_URL}/api/cleaning-inspections`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -364,7 +364,7 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
       
       if (!response.ok) {
         const errorText = await response.text().catch(() => '')
-        console.error('Error saving inspection:', response.status, errorText)
+        console.error('Error saving cleaning inspection:', response.status, errorText)
         try {
           const errorData = JSON.parse(errorText)
           alert(`שגיאה בשמירה: ${errorData.detail || errorText}`)
@@ -375,7 +375,7 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
       }
       
       const result = await response.json().catch(() => null)
-      console.log('Inspection saved successfully:', missionId)
+      console.log('Cleaning inspection saved successfully:', missionId)
       console.log('Response from backend:', JSON.stringify(result, null, 2))
       
       // Verify the response contains the tasks and check save status
@@ -385,7 +385,7 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
         const totalCount = result.totalTasksCount || mission.tasks.length
         const failedCount = result.failedTasksCount || 0
         
-        console.log('Save summary:', {
+        console.log('Cleaning save summary:', {
           saved: savedCount,
           total: totalCount,
           failed: failedCount,
@@ -396,11 +396,11 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
         
         // CRITICAL: Verify tasks were actually saved
         if (failedCount > 0) {
-          console.error(`ERROR: ${failedCount} tasks failed to save!`)
+          console.error(`ERROR: ${failedCount} cleaning tasks failed to save!`)
           alert(`שגיאה: ${failedCount} משימות נכשלו בשמירה. אנא נסה שוב או בדוק את חיבור האינטרנט.`)
         } else if (savedCount < totalCount) {
-          console.error(`ERROR: Only ${savedCount}/${totalCount} tasks were saved!`)
-          console.error('This means some tasks failed to save to the database.')
+          console.error(`ERROR: Only ${savedCount}/${totalCount} cleaning tasks were saved!`)
+          console.error('This means some cleaning tasks failed to save to the database.')
           alert(`אזהרה: רק ${savedCount}/${totalCount} משימות נשמרו. חלק מהמשימות לא נשמרו במסד הנתונים.`)
         }
         
@@ -412,28 +412,28 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
           completed: Boolean(t.completed),
         }))
         
-        console.log('Updating local state with saved tasks:', savedTasks.map((t: any) => ({ id: t.id, completed: t.completed })))
+        console.log('Updating local state with saved cleaning tasks:', savedTasks.map((t: any) => ({ id: t.id, completed: t.completed })))
         
-        // CRITICAL: Reload inspections from backend to ensure we have the latest data for ALL inspections
-        // This fixes the issue where the second inspection doesn't persist after refresh
-        console.log('Reloading ALL inspections from backend after save...')
+        // CRITICAL: Reload cleaning inspections from backend to ensure we have the latest data for ALL cleaning inspections
+        // This fixes the issue where the second cleaning inspection doesn't persist after refresh
+        console.log('Reloading ALL cleaning inspections from backend after save...')
         await loadInspections()
         
         if (savedCount === totalCount && savedCompleted === completedCount) {
           alert(`נשמר בהצלחה! ${completedCount}/${totalCount} משימות הושלמו`)
         } else if (savedCount < totalCount) {
-          console.warn('Warning: Not all tasks were saved:', savedCount, 'of', totalCount)
+          console.warn('Warning: Not all cleaning tasks were saved:', savedCount, 'of', totalCount)
           alert(`נשמר חלקית: ${savedCount}/${totalCount} משימות נשמרו. ${savedCompleted} הושלמו.`)
         } else {
           console.warn('Warning: Saved completion count does not match:', savedCompleted, 'vs', completedCount)
           alert(`נשמר, אך יש לבדוק: ${savedCompleted}/${totalCount} משימות הושלמו (צפוי: ${completedCount})`)
         }
       } else {
-        console.error('Backend response missing tasks:', result)
+        console.error('Backend response missing cleaning tasks:', result)
         alert('נשמר, אך לא ניתן לאמת את השמירה - תגובת השרת לא כוללת משימות')
       }
     } catch (err: any) {
-      console.error('Error saving inspection to backend:', err)
+      console.error('Error saving cleaning inspection to backend:', err)
       alert(`שגיאה בשמירה: ${err.message || 'נסה שוב'}`)
     }
   }
@@ -446,48 +446,48 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
   }, [inspectionMissions])
 
   return (
-    <div className="exit-inspections-container">
-      <div className="exit-inspections-header">
-        <div className="exit-inspections-top-row">
-          <div className="exit-inspections-brand-badge">
-            <div className="exit-inspections-brand-dot" />
-            <span className="exit-inspections-brand-text">Seisignes</span>
+    <div className="cleaning-inspections-container">
+      <div className="cleaning-inspections-header">
+        <div className="cleaning-inspections-top-row">
+          <div className="cleaning-inspections-brand-badge">
+            <div className="cleaning-inspections-brand-dot" />
+            <span className="cleaning-inspections-brand-text">Seisignes</span>
           </div>
-          <button className="exit-inspections-back-button" onClick={() => navigate('/hub')}>
+          <button className="cleaning-inspections-back-button" onClick={() => navigate('/hub')}>
             ← חזרה
           </button>
         </div>
       </div>
-      <div className="exit-inspections-scroll">
+      <div className="cleaning-inspections-scroll">
         {/* Hotel name - show from first mission or most common */}
         {sortedMissions.length > 0 && sortedMissions[0].unitNumber && (
-          <div className="exit-inspections-hotel-name">
-            <h2 className="exit-inspections-hotel-name-text">
+          <div className="cleaning-inspections-hotel-name">
+            <h2 className="cleaning-inspections-hotel-name-text">
               {sortedMissions[0].unitNumber}
             </h2>
           </div>
         )}
         
-        <div className="exit-inspections-title-section">
+        <div className="cleaning-inspections-title-section">
           <div>
-            <h1 className="exit-inspections-title">ביקורת יציאת אורח</h1>
-            <p className="exit-inspections-subtitle">
+            <h1 className="cleaning-inspections-title">ביקורת ניקיון</h1>
+            <p className="cleaning-inspections-subtitle">
               ניהול משימות ניקיון וביקורת לאחר עזיבת אורחים
             </p>
           </div>
-          <div className="exit-inspections-stats-badge">
-            <span className="exit-inspections-stats-badge-text">
+          <div className="cleaning-inspections-stats-badge">
+            <span className="cleaning-inspections-stats-badge-text">
               {sortedMissions.length} משימות
             </span>
           </div>
         </div>
 
         {sortedMissions.length === 0 ? (
-          <div className="exit-inspections-empty-state">
-            <p className="exit-inspections-empty-state-text">אין משימות ביקורת כרגע</p>
+          <div className="cleaning-inspections-empty-state">
+            <p className="cleaning-inspections-empty-state-text">אין משימות ביקורת ניקיון כרגע</p>
           </div>
         ) : (
-          <div className="exit-inspections-missions-list">
+          <div className="cleaning-inspections-missions-list">
             {sortedMissions.map(mission => (
               <InspectionMissionCard
                 key={mission.id}
@@ -503,5 +503,5 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
   )
 }
 
-export default ExitInspectionsScreen
+export default CleaningInspectionsScreen
 

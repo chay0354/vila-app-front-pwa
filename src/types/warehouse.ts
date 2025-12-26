@@ -19,7 +19,7 @@ export type InventoryOrder = {
   id: string
   orderDate: string
   deliveryDate?: string
-  status: 'ממתין לאישור' | 'מאושר' | 'בהזמנה' | 'התקבל' | 'בוטל'
+  status: 'שולם מלא' | 'מחכה להשלמת תשלום'
   orderType: 'הזמנת עובד' | 'הזמנה כללית'
   orderedBy?: string
   unitNumber?: string
