@@ -65,7 +65,7 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
         // Group by departure date - one mission per departure date
         const missionsByDate = new Map<string, InspectionMission>()
         
-        const loadedMissions: InspectionMission[] = (data || []).map((insp: any) => {
+        (data || []).forEach((insp: any) => {
           const backendTasks = (insp.tasks || []).map((t: any) => ({
             id: String(t.id),
             name: String(t.name || ''),
@@ -117,8 +117,6 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
           if (!existing || (existing.tasks.filter(t => t.completed).length < mission.tasks.filter(t => t.completed).length)) {
             missionsByDate.set(departureDate, mission)
           }
-          
-          return mission
         })
         
         // Convert to array (one per departure date)
@@ -137,91 +135,6 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
     } catch (err) {
       console.error('Error loading inspections from backend:', err)
     }
-  }
-
-  // Reconcile missions from orders (fallback if backend has no data)
-  // IMPORTANT: This should ONLY be called if backend has no data
-  // It should NOT overwrite missions loaded from backend
-  const deriveMissionsFromOrders = async () => {
-    // Only derive if we haven't loaded from backend yet
-    if (hasLoadedFromBackend.current) {
-      console.log('Skipping deriveMissionsFromOrders - already loaded from backend')
-      return
-    }
-    
-    setInspectionMissions(prev => {
-      const prevByOrderId = new Map<string, InspectionMission>()
-      prev.forEach(m => prevByOrderId.set(m.orderId, m))
-
-      const next: InspectionMission[] = []
-      const newMissions: InspectionMission[] = []
-      
-      orders
-        .filter(o => o.status !== 'בוטל')
-        .forEach(o => {
-          const existing = prevByOrderId.get(o.id)
-          const isNew = !existing
-          
-          // Ensure tasks are always populated with all default tasks
-          let tasks: InspectionTask[] = []
-          if (existing?.tasks?.length) {
-            // Merge existing tasks with default tasks to ensure all are present
-            const tasksMap = new Map(existing.tasks.map(t => [t.id, t]))
-            tasks = defaultInspectionTasks.map(defaultTask => {
-              const existingTask = tasksMap.get(defaultTask.id)
-              if (existingTask) {
-                // Use existing task (preserves completion status)
-                return { ...existingTask }
-              } else {
-                // Default task not in existing, add it as incomplete
-                return { ...defaultTask }
-              }
-            })
-          } else {
-            // No existing tasks, use all default tasks
-            tasks = defaultInspectionTasks.map(t => ({ ...t }))
-          }
-          
-          const mission: InspectionMission = {
-            id: existing?.id || `INSP-${o.id}`,
-            orderId: o.id,
-            unitNumber: o.unitNumber,
-            guestName: o.guestName,
-            departureDate: o.departureDate,
-            tasks,
-            status: computeInspectionStatus({ departureDate: o.departureDate, tasks }),
-          }
-          next.push(mission)
-          if (isNew) {
-            newMissions.push(mission)
-          }
-        })
-
-      // Save new missions to backend
-      if (newMissions.length > 0) {
-        newMissions.forEach(async (mission) => {
-          try {
-            await fetch(`${API_BASE_URL}/api/inspections`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                id: mission.id,
-                orderId: mission.orderId,
-                unitNumber: mission.unitNumber,
-                guestName: mission.guestName,
-                departureDate: mission.departureDate,
-                status: mission.status,
-                tasks: mission.tasks,
-              }),
-            })
-          } catch (err) {
-            console.error('Error saving new inspection to backend:', err)
-          }
-        })
-      }
-
-      return next
-    })
   }
 
   // Use a ref to track if we've loaded from backend to prevent overwriting

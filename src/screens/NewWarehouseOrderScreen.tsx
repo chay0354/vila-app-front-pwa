@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { API_BASE_URL } from '../apiConfig'
 import { InventoryOrder, InventoryOrderItem } from '../types/warehouse'
-import { UNIT_CATEGORIES, UNIT_NAMES } from '../types/orders'
+import { UNIT_CATEGORIES } from '../types/orders'
 import './NewWarehouseOrderScreen.css'
 
 type ProductEntry = {

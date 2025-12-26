@@ -53,7 +53,6 @@ function HubScreen({ userName, userRole, userImageUrl }: HubScreenProps) {
     return orders.reduce((sum, o) => sum + o.totalAmount, 0)
   }, [orders])
 
-  const paymentPercent = totalRevenue > 0 ? Math.round((totals.totalPaid / totalRevenue) * 100) : 0
 
   return (
     <div className="hub-container">
