@@ -19,10 +19,9 @@ type AttendanceLog = {
 }
 
 type EmployeeManagementScreenProps = {
-  userName: string
 }
 
-function EmployeeManagementScreen({ userName }: EmployeeManagementScreenProps) {
+function EmployeeManagementScreen({}: EmployeeManagementScreenProps) {
   const navigate = useNavigate()
   const [employees, setEmployees] = useState<Employee[]>([])
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([])

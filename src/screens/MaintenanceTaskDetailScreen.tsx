@@ -154,18 +154,6 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
     }
   }
 
-  // This function is no longer needed since closing happens automatically when media is uploaded
-  // Keeping it for backward compatibility but it should not be called
-  const handleConfirmClose = () => {
-    if (!closeModalImageUri) {
-      alert('יש להעלות תמונה או וידאו לפני סגירת המשימה')
-      return
-    }
-    handleUpdateTask({ status: 'סגור', imageUri: closeModalImageUri })
-    alert('המשימה נסגרה בהצלחה')
-    setShowCloseModal(false)
-    navigate(`/maintenance/${unitId}/tasks`)
-  }
 
   const handleSaveEditMedia = async () => {
     const imageUriToSave = editMediaUri === null || editMediaUri === undefined ? undefined : editMediaUri

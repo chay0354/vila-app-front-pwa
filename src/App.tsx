@@ -440,7 +440,7 @@ function App() {
           path="/employee-management" 
           element={
             userName && userRole === 'מנהל' ? (
-              <EmployeeManagementScreen userName={userName} />
+              <EmployeeManagementScreen />
             ) : (
               <Navigate to="/hub" replace />
             )
