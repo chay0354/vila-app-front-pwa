@@ -1,0 +1,357 @@
+import { useState, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { API_BASE_URL } from '../apiConfig'
+import './EmployeeManagementScreen.css'
+
+type Employee = {
+  id: string
+  username: string
+  image_url?: string | null
+  hourly_wage?: number | null
+  role?: string | null
+}
+
+type AttendanceLog = {
+  id: string
+  employee: string
+  clock_in: string
+  clock_out?: string | null
+}
+
+type EmployeeManagementScreenProps = {
+  userName: string
+}
+
+function EmployeeManagementScreen({ userName }: EmployeeManagementScreenProps) {
+  const navigate = useNavigate()
+  const [employees, setEmployees] = useState<Employee[]>([])
+  const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editingWage, setEditingWage] = useState<string | null>(null)
+  const [wageInput, setWageInput] = useState<string>('')
+  const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null)
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  const loadData = async () => {
+    setLoading(true)
+    await Promise.all([loadEmployees(), loadAttendanceLogs()])
+    setLoading(false)
+  }
+
+  const loadEmployees = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/users/with-details`)
+      if (!res.ok) {
+        console.error('Failed to load employees:', res.status)
+        return
+      }
+      const data = await res.json()
+      setEmployees(data || [])
+    } catch (err) {
+      console.error('Error loading employees:', err)
+    }
+  }
+
+  const loadAttendanceLogs = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/attendance/logs/all`)
+      if (!res.ok) {
+        console.error('Failed to load attendance logs:', res.status)
+        return
+      }
+      const data = await res.json()
+      setAttendanceLogs(data || [])
+    } catch (err) {
+      console.error('Error loading attendance logs:', err)
+    }
+  }
+
+  const updateWage = async (employeeId: string, wage: number) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/users/${employeeId}/wage`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hourly_wage: wage }),
+      })
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ detail: 'שגיאה לא ידועה' }))
+        alert(errorData.detail || 'לא ניתן לעדכן את השכר')
+        return
+      }
+      await loadEmployees()
+      setEditingWage(null)
+      setWageInput('')
+      alert('השכר עודכן בהצלחה')
+    } catch (err: any) {
+      alert(err.message || 'אירעה שגיאה בעדכון השכר')
+    }
+  }
+
+  const handleStartEditWage = (employee: Employee) => {
+    setEditingWage(employee.id)
+    setWageInput(employee.hourly_wage?.toString() || '')
+  }
+
+  const handleSaveWage = (employeeId: string) => {
+    const wage = parseFloat(wageInput)
+    if (isNaN(wage) || wage < 0) {
+      alert('אנא הזן שכר שעתי תקין')
+      return
+    }
+    updateWage(employeeId, wage)
+  }
+
+  const handleCancelEdit = () => {
+    setEditingWage(null)
+    setWageInput('')
+  }
+
+  const getFilteredLogs = (employeeUsername: string) => {
+    return attendanceLogs.filter(log => log.employee === employeeUsername)
+  }
+
+  const calculateHours = (logs: AttendanceLog[]) => {
+    return logs.reduce((total, log) => {
+      const clockIn = new Date(log.clock_in)
+      const clockOut = log.clock_out ? new Date(log.clock_out) : new Date()
+      const hours = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)
+      return total + Math.max(0, hours)
+    }, 0)
+  }
+
+  const employeesWithStats = useMemo(() => {
+    // Filter to show only employees (not managers)
+    const employeeAccounts = employees.filter(emp => emp.role !== 'מנהל')
+    
+    return employeeAccounts.map(emp => {
+      const logs = getFilteredLogs(emp.username)
+      const hours = calculateHours(logs)
+      const wage = emp.hourly_wage || 0
+      const earnings = hours * wage
+      
+      return {
+        ...emp,
+        hours: hours.toFixed(2),
+        earnings: earnings.toFixed(2),
+        sessionsCount: logs.length,
+      }
+    })
+  }, [employees, attendanceLogs])
+
+  const selectedEmployeeData = useMemo(() => {
+    if (!selectedEmployee) return null
+    const emp = employees.find(e => e.id === selectedEmployee)
+    if (!emp) return null
+    
+    const logs = getFilteredLogs(emp.username)
+    const sortedLogs = [...logs].sort((a, b) => 
+      new Date(b.clock_in).getTime() - new Date(a.clock_in).getTime()
+    )
+    
+    return {
+      ...emp,
+      logs: sortedLogs.map(log => {
+        const clockIn = new Date(log.clock_in)
+        const clockOut = log.clock_out ? new Date(log.clock_out) : null
+        const hours = clockOut 
+          ? (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)
+          : (new Date().getTime() - clockIn.getTime()) / (1000 * 60 * 60)
+        
+        return {
+          ...log,
+          date: clockIn.toLocaleDateString('he-IL'),
+          timeIn: clockIn.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }),
+          timeOut: clockOut?.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) || 'פתוח',
+          hours: hours.toFixed(2),
+          isOpen: !clockOut,
+        }
+      }),
+    }
+  }, [selectedEmployee, employees, attendanceLogs])
+
+  if (loading) {
+    return (
+      <div className="employee-management-container">
+        <div className="employee-management-header">
+          <button
+            className="employee-management-back-button"
+            onClick={() => navigate('/hub')}
+            type="button"
+          >
+            ← חזרה
+          </button>
+        </div>
+        <div className="employee-management-scroll">
+          <p>טוען...</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="employee-management-container">
+      <div className="employee-management-header">
+        <button
+          className="employee-management-back-button"
+          onClick={() => navigate('/hub')}
+          type="button"
+        >
+          ← חזרה
+        </button>
+      </div>
+      <div className="employee-management-scroll">
+        <div className="employee-management-title-section">
+          <h1 className="employee-management-title">ניהול עובדים</h1>
+        </div>
+
+        <div className="employee-management-grid">
+          {employeesWithStats.map(emp => (
+            <div
+              key={emp.id}
+              className={`employee-card ${selectedEmployee === emp.id ? 'employee-card-selected' : ''}`}
+              onClick={() => setSelectedEmployee(selectedEmployee === emp.id ? null : emp.id)}
+            >
+              <div className="employee-card-header">
+                <div className="employee-avatar">
+                  {emp.image_url ? (
+                    <img src={emp.image_url} alt={emp.username} className="employee-avatar-image" />
+                  ) : (
+                    <div className="employee-avatar-placeholder">
+                      <span className="employee-avatar-icon">👤</span>
+                    </div>
+                  )}
+                </div>
+                <div className="employee-info">
+                  <h3 className="employee-name">{emp.username}</h3>
+                  <div className="employee-stats-row">
+                    <span className="employee-stat">
+                      <span className="employee-stat-label">שעות:</span>
+                      <span className="employee-stat-value">{emp.hours}</span>
+                    </span>
+                    <span className="employee-stat">
+                      <span className="employee-stat-label">סשנים:</span>
+                      <span className="employee-stat-value">{emp.sessionsCount}</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="employee-wage-section">
+                {editingWage === emp.id ? (
+                  <div className="employee-wage-edit">
+                    <input
+                      type="number"
+                      className="employee-wage-input"
+                      value={wageInput}
+                      onChange={(e) => setWageInput(e.target.value)}
+                      placeholder="שכר שעתי"
+                      min="0"
+                      step="0.01"
+                      dir="ltr"
+                    />
+                    <div className="employee-wage-actions">
+                      <button
+                        className="employee-wage-save"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleSaveWage(emp.id)
+                        }}
+                        type="button"
+                      >
+                        שמור
+                      </button>
+                      <button
+                        className="employee-wage-cancel"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleCancelEdit()
+                        }}
+                        type="button"
+                      >
+                        ביטול
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="employee-wage-display">
+                    <span className="employee-wage-label">שכר שעתי:</span>
+                    <span className="employee-wage-value">
+                      {emp.hourly_wage ? `₪${emp.hourly_wage.toLocaleString('he-IL')}` : 'לא הוגדר'}
+                    </span>
+                    <button
+                      className="employee-wage-edit-button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleStartEditWage(emp)
+                      }}
+                      type="button"
+                    >
+                      ערוך
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {emp.hourly_wage && parseFloat(emp.hours) > 0 && (
+                <div className="employee-earnings">
+                  <span className="employee-earnings-label">סה״כ רווחים:</span>
+                  <span className="employee-earnings-value">₪{parseFloat(emp.earnings).toLocaleString('he-IL')}</span>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {selectedEmployeeData && (
+          <div className="employee-details-modal">
+            <div className="employee-details-header">
+              <h2 className="employee-details-title">פירוט שעות עבודה - {selectedEmployeeData.username}</h2>
+              <button
+                className="employee-details-close"
+                onClick={() => setSelectedEmployee(null)}
+                type="button"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="employee-details-content">
+              {selectedEmployeeData.logs.length === 0 ? (
+                <p className="employee-details-empty">אין שעות עבודה בטווח הנבחר</p>
+              ) : (
+                <div className="employee-sessions-list">
+                  {selectedEmployeeData.logs.map((session, idx) => (
+                    <div key={session.id || idx} className="employee-session-item">
+                      <div className="employee-session-date">{session.date}</div>
+                      <div className="employee-session-times">
+                        <span className="employee-session-time">
+                          <span className="employee-session-time-label">כניסה:</span>
+                          {session.timeIn}
+                        </span>
+                        <span className="employee-session-time">
+                          <span className="employee-session-time-label">יציאה:</span>
+                          {session.timeOut}
+                        </span>
+                      </div>
+                      <div className="employee-session-hours">
+                        <span className="employee-session-hours-value">{session.hours} שעות</span>
+                        {session.isOpen && (
+                          <span className="employee-session-open-badge">פתוח</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default EmployeeManagementScreen
+

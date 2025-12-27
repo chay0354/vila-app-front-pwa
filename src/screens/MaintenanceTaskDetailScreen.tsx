@@ -343,7 +343,6 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
                       />
                       העלה אחר
                     </label>
-                    </button>
                     <button
                       className="maintenance-modal-grid-button maintenance-modal-button-ghost"
                       onClick={() => setShowCloseModal(false)}

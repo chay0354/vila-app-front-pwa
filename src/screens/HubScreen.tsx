@@ -122,20 +122,22 @@ function HubScreen({ userName, userRole, userImageUrl }: HubScreenProps) {
           </div>
         </div>
 
-        <div className="hub-stats-grid">
-          <div className="hub-stat-card hub-stat-card-blue">
-            <div className="hub-stat-value">{totals.count}</div>
-            <div className="hub-stat-label">מספר הזמנות</div>
+        {userRole === 'מנהל' && (
+          <div className="hub-stats-grid">
+            <div className="hub-stat-card hub-stat-card-blue">
+              <div className="hub-stat-value">{totals.count}</div>
+              <div className="hub-stat-label">מספר הזמנות</div>
+            </div>
+            <div className="hub-stat-card hub-stat-card-green">
+              <div className="hub-stat-value">₪{totalRevenue.toLocaleString('he-IL')}</div>
+              <div className="hub-stat-label">הכנסות</div>
+            </div>
+            <div className="hub-stat-card hub-stat-card-red">
+              <div className="hub-stat-value">₪{totalExpenses.toLocaleString('he-IL')}</div>
+              <div className="hub-stat-label">הוצאות</div>
+            </div>
           </div>
-          <div className="hub-stat-card hub-stat-card-green">
-            <div className="hub-stat-value">₪{totalRevenue.toLocaleString('he-IL')}</div>
-            <div className="hub-stat-label">הכנסות</div>
-          </div>
-          <div className="hub-stat-card hub-stat-card-red">
-            <div className="hub-stat-value">₪{totalExpenses.toLocaleString('he-IL')}</div>
-            <div className="hub-stat-label">הוצאות</div>
-          </div>
-        </div>
+        )}
 
         <div className="hub-welcome-section">
           <div className="hub-welcome-card">
@@ -228,14 +230,25 @@ function HubScreen({ userName, userRole, userImageUrl }: HubScreenProps) {
                 </button>
               </>
             )}
-            <button
-              className="hub-quick-action-btn hub-quick-action-pink"
-              onClick={() => navigate('/attendance')}
-              type="button"
-            >
-              <span className="hub-quick-action-icon">⏱️</span>
-              <span className="hub-quick-action-text">שעון נוכחות</span>
-            </button>
+            {userRole === 'מנהל' ? (
+              <button
+                className="hub-quick-action-btn hub-quick-action-pink"
+                onClick={() => navigate('/employee-management')}
+                type="button"
+              >
+                <span className="hub-quick-action-icon">👥</span>
+                <span className="hub-quick-action-text">ניהול עובדים</span>
+              </button>
+            ) : (
+              <button
+                className="hub-quick-action-btn hub-quick-action-pink"
+                onClick={() => navigate('/attendance')}
+                type="button"
+              >
+                <span className="hub-quick-action-icon">⏱️</span>
+                <span className="hub-quick-action-text">שעון נוכחות</span>
+              </button>
+            )}
             <button
               className="hub-quick-action-btn hub-quick-action-teal"
               onClick={() => navigate('/cleaning-schedule')}

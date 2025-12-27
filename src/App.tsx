@@ -26,6 +26,7 @@ import InvoicesScreen from './screens/InvoicesScreen'
 import ChatScreen from './screens/ChatScreen'
 import AttendanceScreen from './screens/AttendanceScreen'
 import CleaningScheduleScreen from './screens/CleaningScheduleScreen'
+import EmployeeManagementScreen from './screens/EmployeeManagementScreen'
 import './App.css'
 
 // Component to handle notifications polling
@@ -423,6 +424,16 @@ function App() {
               <AttendanceScreen userName={userName} />
             ) : (
               <Navigate to="/signin" replace />
+            )
+          } 
+        />
+        <Route 
+          path="/employee-management" 
+          element={
+            userName && userRole === 'מנהל' ? (
+              <EmployeeManagementScreen userName={userName} />
+            ) : (
+              <Navigate to="/hub" replace />
             )
           } 
         />

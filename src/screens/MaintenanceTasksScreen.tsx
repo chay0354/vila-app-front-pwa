@@ -152,6 +152,17 @@ function MaintenanceTasksScreen({}: MaintenanceTasksScreenProps) {
                 onClick={() => navigate(`/maintenance/${unit.id}/tasks/${task.id}`)}
               >
                 <div className="maintenance-task-card-header">
+                  <div className="maintenance-task-card-badges">
+                    <span
+                      className="maintenance-task-status-badge"
+                      style={{
+                        backgroundColor: getStatusColor(task.status) + '22',
+                        color: getStatusColor(task.status),
+                      }}
+                    >
+                      {task.status}
+                    </span>
+                  </div>
                   <div className="maintenance-task-card-content">
                     <h3 className="maintenance-task-card-title">{task.title}</h3>
                     <p className="maintenance-task-card-description">{task.description}</p>
@@ -163,17 +174,6 @@ function MaintenanceTasksScreen({}: MaintenanceTasksScreenProps) {
                         מוקצה ל: {resolveAssignee(task.assignedTo)}
                       </p>
                     )}
-                  </div>
-                  <div className="maintenance-task-card-badges">
-                    <span
-                      className="maintenance-task-status-badge"
-                      style={{
-                        backgroundColor: getStatusColor(task.status) + '22',
-                        color: getStatusColor(task.status),
-                      }}
-                    >
-                      {task.status}
-                    </span>
                   </div>
                 </div>
                 {task.imageUri && (
