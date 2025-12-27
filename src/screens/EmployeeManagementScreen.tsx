@@ -226,16 +226,6 @@ function EmployeeManagementScreen({ userName }: EmployeeManagementScreenProps) {
                 </div>
                 <div className="employee-info">
                   <h3 className="employee-name">{emp.username}</h3>
-                  <div className="employee-stats-row">
-                    <span className="employee-stat">
-                      <span className="employee-stat-label">שעות:</span>
-                      <span className="employee-stat-value">{emp.hours}</span>
-                    </span>
-                    <span className="employee-stat">
-                      <span className="employee-stat-label">סשנים:</span>
-                      <span className="employee-stat-value">{emp.sessionsCount}</span>
-                    </span>
-                  </div>
                 </div>
               </div>
 
@@ -306,45 +296,64 @@ function EmployeeManagementScreen({ userName }: EmployeeManagementScreenProps) {
         </div>
 
         {selectedEmployeeData && (
-          <div className="employee-details-modal">
-            <div className="employee-details-header">
-              <h2 className="employee-details-title">פירוט שעות עבודה - {selectedEmployeeData.username}</h2>
-              <button
-                className="employee-details-close"
-                onClick={() => setSelectedEmployee(null)}
-                type="button"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="employee-details-content">
-              {selectedEmployeeData.logs.length === 0 ? (
-                <p className="employee-details-empty">אין שעות עבודה בטווח הנבחר</p>
-              ) : (
-                <div className="employee-sessions-list">
-                  {selectedEmployeeData.logs.map((session, idx) => (
-                    <div key={session.id || idx} className="employee-session-item">
-                      <div className="employee-session-date">{session.date}</div>
-                      <div className="employee-session-times">
-                        <span className="employee-session-time">
-                          <span className="employee-session-time-label">כניסה:</span>
-                          {session.timeIn}
-                        </span>
-                        <span className="employee-session-time">
-                          <span className="employee-session-time-label">יציאה:</span>
-                          {session.timeOut}
-                        </span>
+          <div className="employee-details-modal-overlay" onClick={() => setSelectedEmployee(null)}>
+            <div className="employee-details-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="employee-details-header">
+                <div className="employee-details-header-content">
+                  <div className="employee-details-avatar">
+                    {selectedEmployeeData.image_url ? (
+                      <img src={selectedEmployeeData.image_url} alt={selectedEmployeeData.username} className="employee-details-avatar-image" />
+                    ) : (
+                      <div className="employee-details-avatar-placeholder">
+                        <span className="employee-details-avatar-icon">👤</span>
                       </div>
-                      <div className="employee-session-hours">
-                        <span className="employee-session-hours-value">{session.hours} שעות</span>
-                        {session.isOpen && (
-                          <span className="employee-session-open-badge">פתוח</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    )}
+                  </div>
+                  <div>
+                    <h2 className="employee-details-title">{selectedEmployeeData.username}</h2>
+                    <p className="employee-details-subtitle">פירוט שעות עבודה</p>
+                  </div>
                 </div>
-              )}
+                <button
+                  className="employee-details-close"
+                  onClick={() => setSelectedEmployee(null)}
+                  type="button"
+                >
+                  ✕
+                </button>
+              </div>
+              
+              <div className="employee-details-content">
+                {selectedEmployeeData.logs.length === 0 ? (
+                  <p className="employee-details-empty">אין שעות עבודה</p>
+                ) : (
+                  <div className="employee-sessions-list">
+                    {selectedEmployeeData.logs.map((session, idx) => (
+                      <div key={session.id || idx} className="employee-session-item">
+                        <div className="employee-session-header">
+                          <div className="employee-session-date">{session.date}</div>
+                          <div className="employee-session-hours-badge">
+                            <span className="employee-session-hours-value">{session.hours} שעות</span>
+                            {session.isOpen && (
+                              <span className="employee-session-open-badge">פתוח</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="employee-session-times">
+                          <div className="employee-session-time-item">
+                            <span className="employee-session-time-label">כניסה:</span>
+                            <span className="employee-session-time-value">{session.timeIn}</span>
+                          </div>
+                          <div className="employee-session-time-item">
+                            <span className="employee-session-time-label">יציאה:</span>
+                            <span className="employee-session-time-value">{session.timeOut}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

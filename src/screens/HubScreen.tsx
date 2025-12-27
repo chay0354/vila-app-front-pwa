@@ -20,9 +20,10 @@ type HubScreenProps = {
   userName: string
   userRole?: string | null
   userImageUrl?: string | null
+  onSignOut?: () => void
 }
 
-function HubScreen({ userName, userRole, userImageUrl }: HubScreenProps) {
+function HubScreen({ userName, userRole, userImageUrl, onSignOut }: HubScreenProps) {
   const navigate = useNavigate()
   const [orders, setOrders] = useState<Order[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
@@ -113,10 +114,19 @@ function HubScreen({ userName, userRole, userImageUrl }: HubScreenProps) {
     <div className="hub-container">
       <div className="hub-scroll">
         <div className="hub-top-row">
-          <div className="hub-brand-badge">
-            <div className="hub-brand-dot" />
-            <span className="hub-brand-text">Seisignes</span>
-          </div>
+          <button
+            className="hub-signout-button"
+            onClick={() => {
+              if (onSignOut) {
+                onSignOut()
+              }
+              navigate('/signin')
+            }}
+            type="button"
+          >
+            <span className="hub-signout-icon">🚪</span>
+            <span className="hub-signout-text">יציאה</span>
+          </button>
           <div className="hub-user-chip">
             <span className="hub-user-chip-text">שלום {userName}</span>
           </div>

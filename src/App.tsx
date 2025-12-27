@@ -192,6 +192,15 @@ function App() {
     setUserImageUrl(imageUrl || null)
   }
 
+  const handleSignOut = () => {
+    setUserName(null)
+    setUserRole(null)
+    setUserImageUrl(null)
+    localStorage.removeItem('userName')
+    localStorage.removeItem('userRole')
+    localStorage.removeItem('userImageUrl')
+  }
+
   return (
     <BrowserRouter>
       <NotificationPoller userName={userName} />
@@ -221,7 +230,7 @@ function App() {
           path="/hub" 
           element={
             userName ? (
-              <HubScreen userName={userName} userRole={userRole} userImageUrl={userImageUrl} />
+              <HubScreen userName={userName} userRole={userRole} userImageUrl={userImageUrl} onSignOut={handleSignOut} />
             ) : (
               <Navigate to="/signin" replace />
             )

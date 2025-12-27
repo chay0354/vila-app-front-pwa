@@ -18,28 +18,37 @@
   margin-bottom: 20px;
 }
 
-.hub-brand-badge {
+.hub-signout-button {
   display: flex;
   flex-direction: row-reverse;
   align-items: center;
-  background-color: #e0f2fe;
-  padding: 8px 12px;
+  background-color: #fee2e2;
+  padding: 8px 14px;
   border-radius: 16px;
-  border: 1px solid #bae6fd;
+  border: 1px solid #ef4444;
   gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-.hub-brand-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 8px;
-  background-color: #38bdf8;
+.hub-signout-button:hover {
+  background-color: #fecaca;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);
 }
 
-.hub-brand-text {
-  color: #0f172a;
-  font-weight: 800;
+.hub-signout-button:active {
+  transform: translateY(0);
+}
+
+.hub-signout-icon {
   font-size: 16px;
+}
+
+.hub-signout-text {
+  color: #0f172a;
+  font-weight: 700;
+  font-size: 14px;
 }
 
 .hub-user-chip {

@@ -71,7 +71,7 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
             name: String(t.name || ''),
             completed: Boolean(t.completed),
           }))
-          
+
           console.log('Loaded inspection:', insp.id, 'with', backendTasks.length, 'tasks from backend')
           
           // Merge backend tasks with default tasks
@@ -273,7 +273,7 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-      })
+    })
       
       if (!response.ok) {
         const errorText = await response.text().catch(() => '')
@@ -366,9 +366,9 @@ function ExitInspectionsScreen({}: ExitInspectionsScreenProps) {
             <div className="exit-inspections-brand-dot" />
             <span className="exit-inspections-brand-text">Seisignes</span>
           </div>
-          <button className="exit-inspections-back-button" onClick={() => navigate('/hub')}>
-            ← חזרה
-          </button>
+        <button className="exit-inspections-back-button" onClick={() => navigate('/hub')}>
+          ← חזרה
+        </button>
         </div>
       </div>
       <div className="exit-inspections-scroll">
