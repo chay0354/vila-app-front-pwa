@@ -1,8 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { API_BASE_URL } from '../apiConfig'
-import { Order } from '../types/orders'
-import OrderCard from '../components/OrderCard'
+import { Order, UNIT_NAMES } from '../types/orders'
 import './OrdersScreen.css'
 
 type OrdersScreenProps = {
@@ -49,6 +48,39 @@ function OrdersScreen({ userName }: OrdersScreenProps) {
     const totalPaid = orders.reduce((sum, o) => sum + o.paidAmount, 0)
     return { count: orders.length, totalPaid }
   }, [orders])
+
+  // Group orders by unit (hotel)
+  const ordersByUnit = useMemo(() => {
+    // Start with all known units from UNIT_NAMES
+    const unitMap = new Map<string, { unitName: string; orders: Order[] }>()
+    
+    // Initialize all units
+    UNIT_NAMES.forEach(unitName => {
+      unitMap.set(unitName, { unitName, orders: [] })
+    })
+    
+    // Add orders to their respective units
+    orders.forEach(order => {
+      const unitName = order.unitNumber || 'לא צוין'
+      const unit = unitMap.get(unitName) || { unitName, orders: [] }
+      unit.orders.push(order)
+      unitMap.set(unitName, unit)
+    })
+    
+    // Convert to array and filter out units with no orders (or keep all units)
+    return Array.from(unitMap.values())
+      .filter(unit => unit.orders.length > 0) // Only show units with orders
+      .sort((a, b) => a.unitName.localeCompare(b.unitName))
+  }, [orders])
+
+  const getUnitStats = (unitOrders: Order[]) => {
+    const total = unitOrders.length
+    const paid = unitOrders.filter(o => 
+      o.status === 'שולם' || (o.totalAmount > 0 && o.paidAmount >= o.totalAmount)
+    ).length
+    const unpaid = total - paid
+    return { total, paid, unpaid }
+  }
 
   const createOrder = async () => {
     try {
@@ -163,13 +195,50 @@ function OrdersScreen({ userName }: OrdersScreenProps) {
             <p className="orders-empty-text">אין הזמנות כרגע</p>
           </div>
         ) : (
-          orders.map(order => (
-            <OrderCard
-              key={order.id}
-              order={order}
-              onEdit={(id) => navigate(`/orders/${id}`)}
-            />
-          ))
+          <div className="orders-units-grid">
+            {ordersByUnit.map(unit => {
+              const stats = getUnitStats(unit.orders)
+              return (
+                <div
+                  key={unit.unitName}
+                  className="orders-unit-card"
+                  onClick={() => {
+                    // Navigate to a filtered view or show orders for this unit
+                    // For now, we'll just show all orders but could filter by unit
+                    // You can implement unit-specific order view later if needed
+                  }}
+                >
+                  <div className="orders-unit-card-header">
+                    <div className="orders-unit-icon">
+                      <span className="orders-unit-icon-text">🏠</span>
+                    </div>
+                    <div className="orders-unit-card-content">
+                      <h3 className="orders-unit-card-name">{unit.unitName}</h3>
+                      <p className="orders-unit-card-type">יחידת נופש</p>
+                    </div>
+                  </div>
+                  <div className="orders-unit-stats">
+                    <div className="orders-unit-stat-item">
+                      <span className="orders-unit-stat-value">{stats.total}</span>
+                      <span className="orders-unit-stat-label">סה״כ הזמנות</span>
+                    </div>
+                    <div className="orders-unit-stat-item">
+                      <span className="orders-unit-stat-value" style={{ color: '#22c55e' }}>
+                        {stats.paid}
+                      </span>
+                      <span className="orders-unit-stat-label">שולם</span>
+                    </div>
+                    <div className="orders-unit-stat-item">
+                      <span className="orders-unit-stat-value" style={{ color: '#f59e0b' }}>
+                        {stats.unpaid}
+                      </span>
+                      <span className="orders-unit-stat-label">לא שולם</span>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         )}
       </div>
     </div>
