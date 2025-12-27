@@ -97,15 +97,22 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
     return user?.username || assignedTo
   }
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, setUri: (uri: string) => void) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, setUri: (uri: string) => void, autoClose?: boolean) => {
     const file = e.target.files?.[0]
     if (!file) return
 
     const reader = new FileReader()
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const result = event.target?.result
       if (typeof result === 'string') {
         setUri(result)
+        // If autoClose is true (for close modal), automatically close the task
+        if (autoClose && task) {
+          await handleUpdateTask({ status: 'סגור', imageUri: result })
+          alert('המשימה נסגרה בהצלחה')
+          setShowCloseModal(false)
+          navigate(`/maintenance/${unitId}/tasks`)
+        }
       }
     }
     reader.readAsDataURL(file)
@@ -147,6 +154,8 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
     }
   }
 
+  // This function is no longer needed since closing happens automatically when media is uploaded
+  // Keeping it for backward compatibility but it should not be called
   const handleConfirmClose = () => {
     if (!closeModalImageUri) {
       alert('יש להעלות תמונה או וידאו לפני סגירת המשימה')
@@ -169,8 +178,6 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
     switch (status) {
       case 'פתוח':
         return '#f59e0b'
-      case 'בטיפול':
-        return '#3b82f6'
       case 'סגור':
         return '#22c55e'
       default:
@@ -322,7 +329,7 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
                       <input
                         type="file"
                         accept="image/*,video/*"
-                        onChange={(e) => handleFileSelect(e, setCloseModalImageUri)}
+                        onChange={(e) => handleFileSelect(e, setCloseModalImageUri, true)}
                         style={{ display: 'none' }}
                       />
                       החלף
@@ -331,17 +338,11 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
                       <input
                         type="file"
                         accept="image/*,video/*"
-                        onChange={(e) => handleFileSelect(e, setCloseModalImageUri)}
+                        onChange={(e) => handleFileSelect(e, setCloseModalImageUri, true)}
                         style={{ display: 'none' }}
                       />
                       העלה אחר
                     </label>
-                    <button
-                      className="maintenance-modal-grid-button maintenance-close-task-button"
-                      onClick={handleConfirmClose}
-                      type="button"
-                    >
-                      סגור משימה
                     </button>
                     <button
                       className="maintenance-modal-grid-button maintenance-modal-button-ghost"
@@ -357,7 +358,7 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
                   <input
                     type="file"
                     accept="image/*,video/*"
-                    onChange={(e) => handleFileSelect(e, setCloseModalImageUri)}
+                    onChange={(e) => handleFileSelect(e, setCloseModalImageUri, true)}
                     style={{ display: 'none' }}
                   />
                   + העלה תמונה/וידאו

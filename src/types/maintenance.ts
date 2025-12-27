@@ -1,4 +1,4 @@
-export type MaintenanceStatus = 'פתוח' | 'בטיפול' | 'סגור'
+export type MaintenanceStatus = 'פתוח' | 'סגור'
 
 export type MaintenanceTask = {
   id: string

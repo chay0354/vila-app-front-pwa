@@ -87,7 +87,7 @@ function ReportsScreen({}: ReportsScreenProps) {
           unitId,
           title: (t.title || '').toString(),
           description: (t.description || '').toString(),
-          status: (t.status || 'פתוח') as 'פתוח' | 'בטיפול' | 'סגור',
+          status: (t.status || 'פתוח') as 'פתוח' | 'סגור',
           createdDate: (t.created_date || t.createdDate || new Date().toISOString().split('T')[0]).toString(),
           assignedTo: (t.assigned_to || t.assignedTo || undefined)?.toString(),
           imageUri: (t.image_uri || t.imageUri || undefined)?.toString(),
@@ -480,14 +480,13 @@ function ReportsScreen({}: ReportsScreenProps) {
 
   const normalizeMaintenanceStatus = (s: string) => {
     if (s === 'open' || s === 'פתוח') return 'פתוח'
-    if (s === 'in_progress' || s === 'בטיפול') return 'בטיפול'
+    if (s === 'in_progress' || s === 'בטיפול') return 'פתוח' // Convert old 'בטיפול' to 'פתוח'
     if (s === 'closed' || s === 'סגור') return 'סגור'
     return s || 'פתוח'
   }
 
   const maintenanceTotal = maintenanceTasksEffective.length
   const maintenanceOpen = maintenanceTasksEffective.filter((t: any) => normalizeMaintenanceStatus(t.status) === 'פתוח').length
-  const maintenanceInProgress = maintenanceTasksEffective.filter((t: any) => normalizeMaintenanceStatus(t.status) === 'בטיפול').length
   const maintenanceClosed = maintenanceTasksEffective.filter((t: any) => normalizeMaintenanceStatus(t.status) === 'סגור').length
 
   const maintenanceTopOpen = useMemo(() => {
@@ -548,7 +547,6 @@ function ReportsScreen({}: ReportsScreenProps) {
         unitName: string
         total: number
         open: number
-        inProgress: number
         closed: number
         tasks: any[]
       }
@@ -564,14 +562,12 @@ function ReportsScreen({}: ReportsScreenProps) {
           unitName,
           total: 0,
           open: 0,
-          inProgress: 0,
           closed: 0,
           tasks: [],
         }
       const next = { ...prev }
       next.total += 1
       if (st === 'פתוח') next.open += 1
-      else if (st === 'בטיפול') next.inProgress += 1
       else if (st === 'סגור') next.closed += 1
       next.tasks = [...next.tasks, t]
       map.set(unitId, next)
@@ -583,7 +579,7 @@ function ReportsScreen({}: ReportsScreenProps) {
         tasks: r.tasks.sort((a: any, b: any) => {
           const sa = normalizeMaintenanceStatus(a.status)
           const sb = normalizeMaintenanceStatus(b.status)
-          const order = (s: string) => (s === 'פתוח' ? 0 : s === 'בטיפול' ? 1 : 2)
+          const order = (s: string) => (s === 'פתוח' ? 0 : 1)
           const cmp = order(sa) - order(sb)
           if (cmp !== 0) return cmp
           const da = safeDate(a.created_date || a.createdDate || '')?.getTime() || 0
@@ -591,7 +587,7 @@ function ReportsScreen({}: ReportsScreenProps) {
           return db - da
         }),
       }))
-      .sort((a, b) => b.open + b.inProgress - (a.open + a.inProgress))
+      .sort((a, b) => b.open - a.open)
 
     return rows
   }, [maintenanceTasksEffective, maintenanceUnitsMap])
@@ -822,7 +818,7 @@ function ReportsScreen({}: ReportsScreenProps) {
                 accent="#22c55e"
                 details={[
                   `סה״כ משימות: ${maintenanceTotal}`,
-                  `פתוח: ${maintenanceOpen} | בטיפול: ${maintenanceInProgress}`,
+                  `פתוח: ${maintenanceOpen}`,
                   `סגור: ${maintenanceClosed}`,
                 ]}
                 cta="פתח דוח מלא"
@@ -1118,10 +1114,6 @@ function ReportsScreen({}: ReportsScreenProps) {
                     <div className="reports-unit-kpi-value">{maintenanceOpen}</div>
                   </div>
                   <div className="reports-unit-kpi-item">
-                    <div className="reports-unit-kpi-label">בטיפול</div>
-                    <div className="reports-unit-kpi-value">{maintenanceInProgress}</div>
-                  </div>
-                  <div className="reports-unit-kpi-item">
                     <div className="reports-unit-kpi-label">סגור</div>
                     <div className="reports-unit-kpi-value">{maintenanceClosed}</div>
                   </div>
@@ -1201,10 +1193,6 @@ function ReportsScreen({}: ReportsScreenProps) {
                         <div className="reports-unit-kpi-item">
                           <div className="reports-unit-kpi-label">פתוח</div>
                           <div className="reports-unit-kpi-value">{u.open}</div>
-                        </div>
-                        <div className="reports-unit-kpi-item">
-                          <div className="reports-unit-kpi-label">בטיפול</div>
-                          <div className="reports-unit-kpi-value">{u.inProgress}</div>
                         </div>
                         <div className="reports-unit-kpi-item">
                           <div className="reports-unit-kpi-label">סגור</div>

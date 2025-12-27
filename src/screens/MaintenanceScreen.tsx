@@ -60,9 +60,8 @@ function MaintenanceScreen({}: MaintenanceScreenProps) {
 
   const getUnitStats = (unit: MaintenanceUnit) => {
     const open = unit.tasks.filter(t => t.status === 'פתוח').length
-    const inProgress = unit.tasks.filter(t => t.status === 'בטיפול').length
     const closed = unit.tasks.filter(t => t.status === 'סגור').length
-    return { open, inProgress, closed, total: unit.tasks.length }
+    return { open, closed, total: unit.tasks.length }
   }
 
   return (
@@ -110,12 +109,6 @@ function MaintenanceScreen({}: MaintenanceScreenProps) {
                       {stats.open}
                     </span>
                     <span className="maintenance-unit-stat-label">פתוחות</span>
-                  </div>
-                  <div className="maintenance-unit-stat-item">
-                    <span className="maintenance-unit-stat-value" style={{ color: '#3b82f6' }}>
-                      {stats.inProgress}
-                    </span>
-                    <span className="maintenance-unit-stat-label">בטיפול</span>
                   </div>
                   <div className="maintenance-unit-stat-item">
                     <span className="maintenance-unit-stat-value" style={{ color: '#22c55e' }}>
