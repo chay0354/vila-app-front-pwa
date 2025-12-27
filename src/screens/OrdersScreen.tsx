@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { API_BASE_URL } from '../apiConfig'
 import { Order, UNIT_NAMES } from '../types/orders'
+import OrderCard from '../components/OrderCard'
 import './OrdersScreen.css'
 
 type OrdersScreenProps = {
@@ -11,6 +12,7 @@ type OrdersScreenProps = {
 function OrdersScreen({ userName }: OrdersScreenProps) {
   const navigate = useNavigate()
   const [orders, setOrders] = useState<Order[]>([])
+  const [selectedUnit, setSelectedUnit] = useState<string | null>(null)
 
   useEffect(() => {
     loadOrders()
@@ -194,6 +196,30 @@ function OrdersScreen({ userName }: OrdersScreenProps) {
           <div className="orders-empty-state">
             <p className="orders-empty-text">אין הזמנות כרגע</p>
           </div>
+        ) : selectedUnit ? (
+          <div>
+            <div className="orders-unit-header">
+              <button
+                className="orders-back-to-units-button"
+                onClick={() => setSelectedUnit(null)}
+                type="button"
+              >
+                ← חזרה לרשימת יחידות
+              </button>
+              <h2 className="orders-unit-title">הזמנות - {selectedUnit}</h2>
+            </div>
+            <div className="orders-list">
+              {orders
+                .filter(order => order.unitNumber === selectedUnit)
+                .map(order => (
+                  <OrderCard
+                    key={order.id}
+                    order={order}
+                    onEdit={(id) => navigate(`/orders/${id}`)}
+                  />
+                ))}
+            </div>
+          </div>
         ) : (
           <div className="orders-units-grid">
             {ordersByUnit.map(unit => {
@@ -202,11 +228,7 @@ function OrdersScreen({ userName }: OrdersScreenProps) {
                 <div
                   key={unit.unitName}
                   className="orders-unit-card"
-                  onClick={() => {
-                    // Navigate to a filtered view or show orders for this unit
-                    // For now, we'll just show all orders but could filter by unit
-                    // You can implement unit-specific order view later if needed
-                  }}
+                  onClick={() => setSelectedUnit(unit.unitName)}
                 >
                   <div className="orders-unit-card-header">
                     <div className="orders-unit-icon">
