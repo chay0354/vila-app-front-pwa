@@ -124,7 +124,7 @@ function EmployeeManagementScreen({}: EmployeeManagementScreenProps) {
   const employeesWithStats = useMemo(() => {
     // Filter to show only employees (not managers)
     const managerRoles = ['מנהל', 'מנהל ראשי', 'מנהל הזמנות', 'מנהל מתחם'];
-    const employeeAccounts = employees.filter(emp => !managerRoles.includes(emp.role))
+    const employeeAccounts = employees.filter(emp => emp.role && !managerRoles.includes(emp.role))
     
     return employeeAccounts.map(emp => {
       const logs = getFilteredLogs(emp.username)
