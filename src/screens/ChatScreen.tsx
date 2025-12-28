@@ -21,7 +21,7 @@ function ChatScreen({ userName }: ChatScreenProps) {
     // Refresh messages every 5 seconds
     const interval = setInterval(loadChatMessages, 5000)
     return () => clearInterval(interval)
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     // Auto-scroll to bottom when messages change
@@ -45,7 +45,14 @@ function ChatScreen({ userName }: ChatScreenProps) {
       const data = await res.json()
       // Reverse to show oldest first (backend returns newest first)
       const reversedMessages = (data ?? []).reverse()
-      setMessages(reversedMessages)
+      
+      // Only update if messages have actually changed (compare by IDs)
+      const currentMessageIds = messages.map(m => m.id).join(',')
+      const newMessageIds = reversedMessages.map(m => m.id).join(',')
+      
+      if (currentMessageIds !== newMessageIds) {
+        setMessages(reversedMessages)
+      }
       setLoading(false)
     } catch (err) {
       console.warn('Error loading chat messages', err)

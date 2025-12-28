@@ -19,6 +19,8 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
   const [closeModalImageUri, setCloseModalImageUri] = useState<string | undefined>(undefined)
   const [showEditMediaModal, setShowEditMediaModal] = useState(false)
   const [editMediaUri, setEditMediaUri] = useState<string | undefined>(undefined)
+  const [isUploadingClose, setIsUploadingClose] = useState(false)
+  const [isUploadingEdit, setIsUploadingEdit] = useState(false)
 
   useEffect(() => {
     loadSystemUsers()
@@ -97,25 +99,75 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
     return user?.username || assignedTo
   }
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, setUri: (uri: string) => void, autoClose?: boolean) => {
+  const uploadFileToStorage = async (file: File): Promise<string> => {
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      
+      const res = await fetch(`${API_BASE_URL}/api/storage/upload`, {
+        method: 'POST',
+        body: formData,
+      })
+      
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '')
+        throw new Error(`Storage upload failed: ${errText}`)
+      }
+      
+      const data = await res.json()
+      return data.url
+    } catch (err: any) {
+      console.error('Error uploading to storage, falling back to data URI:', err)
+      // Fallback to data URI if storage upload fails
+      return new Promise((resolve) => {
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          const result = event.target?.result
+          if (typeof result === 'string') {
+            resolve(result)
+          } else {
+            throw new Error('Failed to read file')
+          }
+        }
+        reader.onerror = () => {
+          throw new Error('Failed to read file')
+        }
+        reader.readAsDataURL(file)
+      })
+    }
+  }
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>, setUri: (uri: string) => void, autoClose?: boolean) => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    const reader = new FileReader()
-    reader.onload = async (event) => {
-      const result = event.target?.result
-      if (typeof result === 'string') {
-        setUri(result)
-        // If autoClose is true (for close modal), automatically close the task
-        if (autoClose && task) {
-          await handleUpdateTask({ status: 'סגור', imageUri: result })
+    if (autoClose) {
+      setIsUploadingClose(true)
+    }
+
+    try {
+      // Upload to storage first
+      const storageUrl = await uploadFileToStorage(file)
+      setUri(storageUrl)
+      
+      // If autoClose is true (for close modal), automatically close the task
+      if (autoClose && task) {
+        try {
+          await handleUpdateTask({ status: 'סגור', imageUri: storageUrl })
           alert('המשימה נסגרה בהצלחה')
           setShowCloseModal(false)
           navigate(`/maintenance/${unitId}/tasks`)
+        } finally {
+          setIsUploadingClose(false)
         }
       }
+    } catch (err: any) {
+      console.error('Error handling file:', err)
+      alert(err.message || 'שגיאה בהעלאת הקובץ')
+      if (autoClose) {
+        setIsUploadingClose(false)
+      }
     }
-    reader.readAsDataURL(file)
   }
 
   const handleUpdateTask = async (updates: Partial<MaintenanceTask>) => {
@@ -156,10 +208,15 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
 
 
   const handleSaveEditMedia = async () => {
-    const imageUriToSave = editMediaUri === null || editMediaUri === undefined ? undefined : editMediaUri
-    await handleUpdateTask({ imageUri: imageUriToSave })
-    alert(imageUriToSave ? 'המדיה עודכנה בהצלחה' : 'המדיה הוסרה בהצלחה')
-    setShowEditMediaModal(false)
+    setIsUploadingEdit(true)
+    try {
+      const imageUriToSave = editMediaUri === null || editMediaUri === undefined ? undefined : editMediaUri
+      await handleUpdateTask({ imageUri: imageUriToSave })
+      alert(imageUriToSave ? 'המדיה עודכנה בהצלחה' : 'המדיה הוסרה בהצלחה')
+      setShowEditMediaModal(false)
+    } finally {
+      setIsUploadingEdit(false)
+    }
   }
 
   const getStatusColor = (status: string) => {
@@ -191,9 +248,9 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
     )
   }
 
-  const isVideo = task.imageUri?.startsWith('data:video/') || task.imageUri?.includes('.mp4') || task.imageUri?.includes('.mov')
-  const editIsVideo = editMediaUri?.startsWith('data:video/') || editMediaUri?.includes('.mp4') || editMediaUri?.includes('.mov')
-  const closeIsVideo = closeModalImageUri?.startsWith('data:video/') || closeModalImageUri?.includes('.mp4') || closeModalImageUri?.includes('.mov')
+  const isVideo = task.imageUri?.startsWith('data:video/') || task.imageUri?.includes('.mp4') || task.imageUri?.includes('.mov') || task.imageUri?.includes('/vidoes/') || task.imageUri?.includes('/storage/v1/object/public/vidoes/')
+  const editIsVideo = editMediaUri?.startsWith('data:video/') || editMediaUri?.includes('.mp4') || editMediaUri?.includes('.mov') || editMediaUri?.includes('/vidoes/') || editMediaUri?.includes('/storage/v1/object/public/vidoes/')
+  const closeIsVideo = closeModalImageUri?.startsWith('data:video/') || closeModalImageUri?.includes('.mp4') || closeModalImageUri?.includes('.mov') || closeModalImageUri?.includes('/vidoes/') || closeModalImageUri?.includes('/storage/v1/object/public/vidoes/')
 
   return (
     <div className="maintenance-task-detail-container">
@@ -341,14 +398,15 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
                   </div>
                 </div>
               ) : (
-                <label className="maintenance-upload-image-button">
+                <label className="maintenance-upload-image-button" style={{ opacity: isUploadingClose ? 0.6 : 1, pointerEvents: isUploadingClose ? 'none' : 'auto' }}>
                   <input
                     type="file"
                     accept="image/*,video/*"
                     onChange={(e) => handleFileSelect(e, setCloseModalImageUri, true)}
                     style={{ display: 'none' }}
+                    disabled={isUploadingClose}
                   />
-                  + העלה תמונה/וידאו
+                  {isUploadingClose ? '⏳ מעלה...' : '+ העלה תמונה/וידאו'}
                 </label>
               )}
             </div>
@@ -387,14 +445,15 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
                   </div>
                 </div>
               ) : (
-                <label className="maintenance-upload-image-button">
+                <label className="maintenance-upload-image-button" style={{ opacity: isUploadingEdit ? 0.6 : 1, pointerEvents: isUploadingEdit ? 'none' : 'auto' }}>
                   <input
                     type="file"
                     accept="image/*,video/*"
                     onChange={(e) => handleFileSelect(e, setEditMediaUri)}
                     style={{ display: 'none' }}
+                    disabled={isUploadingEdit}
                   />
-                  + העלה תמונה/וידאו
+                  {isUploadingEdit ? '⏳ מעלה...' : '+ העלה תמונה/וידאו'}
                 </label>
               )}
             </div>
@@ -406,8 +465,10 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
                     className="maintenance-modal-button maintenance-modal-button-primary"
                     onClick={handleSaveEditMedia}
                     type="button"
+                    disabled={isUploadingEdit}
+                    style={{ opacity: isUploadingEdit ? 0.6 : 1 }}
                   >
-                    אישור
+                    {isUploadingEdit ? '⏳ מעלה...' : 'אישור'}
                   </button>
                   <button
                     className="maintenance-modal-button maintenance-modal-button-ghost"

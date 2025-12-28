@@ -1,8 +1,9 @@
 .chat-container {
-  min-height: 100vh;
+  height: 100vh;
   background-color: #f6f7fb;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .chat-header {
@@ -46,12 +47,14 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0;
 }
 
 .chat-messages-list {
   flex: 1;
   overflow-y: auto;
   padding: 16px;
+  padding-bottom: 20px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -68,7 +71,7 @@
 
 .chat-empty-text {
   font-size: 16px;
-  color: #64748b;
+  color: #000000;
   margin: 0 0 8px 0;
   text-align: center;
 }
@@ -153,10 +156,14 @@
   display: flex;
   flex-direction: row-reverse;
   padding: 12px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   background-color: #fff;
   border-top: 1px solid #e2e8f0;
   gap: 8px;
   align-items: flex-end;
+  flex-shrink: 0;
+  z-index: 10;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .chat-input {

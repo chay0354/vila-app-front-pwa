@@ -88,18 +88,56 @@ function NewMaintenanceTaskScreen({ userName }: NewMaintenanceTaskScreenProps) {
     }
   }
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const uploadFileToStorage = async (file: File): Promise<string> => {
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      
+      const res = await fetch(`${API_BASE_URL}/api/storage/upload`, {
+        method: 'POST',
+        body: formData,
+      })
+      
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '')
+        throw new Error(`Storage upload failed: ${errText}`)
+      }
+      
+      const data = await res.json()
+      return data.url
+    } catch (err: any) {
+      console.error('Error uploading to storage, falling back to data URI:', err)
+      // Fallback to data URI if storage upload fails
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          const result = event.target?.result
+          if (typeof result === 'string') {
+            resolve(result)
+          } else {
+            reject(new Error('Failed to read file'))
+          }
+        }
+        reader.onerror = () => {
+          reject(new Error('Failed to read file'))
+        }
+        reader.readAsDataURL(file)
+      })
+    }
+  }
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const result = event.target?.result
-      if (typeof result === 'string') {
-        setMediaUri(result)
-      }
+    try {
+      // Upload to storage first
+      const storageUrl = await uploadFileToStorage(file)
+      setMediaUri(storageUrl)
+    } catch (err: any) {
+      console.error('Error handling file:', err)
+      alert(err.message || 'שגיאה בהעלאת הקובץ')
     }
-    reader.readAsDataURL(file)
   }
 
   const handleSave = async () => {
@@ -168,7 +206,7 @@ function NewMaintenanceTaskScreen({ userName }: NewMaintenanceTaskScreenProps) {
   }
 
   const selectedUser = systemUsers.find(u => u.id.toString() === assignedTo)
-  const isVideo = mediaUri?.startsWith('data:video/') || mediaUri?.includes('.mp4') || mediaUri?.includes('.mov')
+  const isVideo = mediaUri?.startsWith('data:video/') || mediaUri?.includes('.mp4') || mediaUri?.includes('.mov') || mediaUri?.includes('/vidoes/') || mediaUri?.includes('/storage/v1/object/public/vidoes/')
 
   return (
     <div className="new-maintenance-task-container">
