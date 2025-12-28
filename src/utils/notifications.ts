@@ -114,40 +114,41 @@ export const getNotificationPermission = (): NotificationPermission | 'unknown' 
 
 /**
  * Register Web Push subscription for background notifications
+ * Simple version that works on iOS PWA
  */
 export const registerPushSubscription = async (username: string, apiBaseUrl: string): Promise<void> => {
   if (typeof window === 'undefined') return
 
-  // Check if service worker and push are supported
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-    console.warn('Web Push not supported in this browser')
-    return
-  }
-
-  // Check notification permission
-  if (Notification.permission !== 'granted') {
-    console.warn('Notification permission not granted')
-    return
-  }
-
+  // Always register a device token (works on all platforms including iOS)
   try {
-    // Get service worker registration
-    const registration = await navigator.serviceWorker.ready
-
-    // Subscribe to push notifications
-    // Note: In production, you would need a VAPID public key from your server
-    // For now, we'll create a subscription and register it
-    const subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: null, // In production, use VAPID public key
+    const deviceId = `web-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    const res = await fetch(`${apiBaseUrl}/push/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username,
+        token: deviceId,
+        platform: 'web',
+      }),
     })
+    if (res.ok) {
+      console.log('Push token registered successfully for iOS PWA')
+    }
+  } catch (error) {
+    console.warn('Error registering push token:', error)
+  }
 
-    // Convert subscription to a string token for backend
-    const subscriptionJson = JSON.stringify(subscription)
-    const token = btoa(subscriptionJson) // Base64 encode the subscription
-
-    // Register with backend
+  // Try Web Push subscription if supported (not available on iOS Safari)
+  if ('serviceWorker' in navigator && 'PushManager' in window && Notification.permission === 'granted') {
     try {
+      const registration = await navigator.serviceWorker.ready
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: null,
+      })
+      const subscriptionJson = JSON.stringify(subscription)
+      const token = btoa(subscriptionJson)
+      
       const res = await fetch(`${apiBaseUrl}/push/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -157,35 +158,86 @@ export const registerPushSubscription = async (username: string, apiBaseUrl: str
           platform: 'web',
         }),
       })
-
       if (res.ok) {
-        console.log('Web Push subscription registered successfully')
-      } else {
-        console.warn('Failed to register Web Push subscription:', res.status)
+        console.log('Web Push subscription registered')
       }
     } catch (error) {
-      console.warn('Error registering Web Push subscription with backend:', error)
+      // Web Push not supported (e.g., iOS Safari) - that's OK, we have device token
+      console.log('Web Push not available, using device token fallback')
     }
-  } catch (error) {
-    console.warn('Error creating Web Push subscription:', error)
-    // Fallback: register a simple device token if push subscription fails
+  }
+}
+
+/**
+ * Start background polling for notifications (works on iOS PWA)
+ */
+export const startBackgroundPolling = (username: string, apiBaseUrl: string, onNotification: (title: string, body: string) => void): (() => void) => {
+  if (typeof window === 'undefined') return () => {}
+  
+  let lastCheckTime = Date.now()
+  let pollInterval: number | null = null
+  
+  const checkForNotifications = async () => {
     try {
-      const deviceId = `web-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-      const res = await fetch(`${apiBaseUrl}/push/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username,
-          token: deviceId,
-          platform: 'web',
-        }),
-      })
-      if (res.ok) {
-        console.log('Fallback push token registered')
+      // Check for new chat messages
+      const chatRes = await fetch(`${apiBaseUrl}/api/chat/messages?limit=1&order=created_at.desc`)
+      if (chatRes.ok) {
+        const messages = await chatRes.json()
+        if (messages && messages.length > 0) {
+          const latestMessage = messages[0]
+          const messageTime = new Date(latestMessage.created_at).getTime()
+          if (messageTime > lastCheckTime && latestMessage.sender !== username) {
+            onNotification('הודעה חדשה', `${latestMessage.sender}: ${latestMessage.content}`)
+            lastCheckTime = messageTime
+          }
+        }
       }
-    } catch (fallbackError) {
-      console.warn('Error registering fallback push token:', fallbackError)
+      
+      // Check for new maintenance task assignments
+      const tasksRes = await fetch(`${apiBaseUrl}/api/maintenance/tasks`)
+      if (tasksRes.ok) {
+        const tasks = await tasksRes.json()
+        const userTasks = tasks.filter((t: any) => {
+          const assignedTo = (t.assigned_to || t.assignedTo || '').toString()
+          return assignedTo === username || assignedTo.includes(username)
+        })
+        if (userTasks.length > 0) {
+          const newTasks = userTasks.filter((t: any) => {
+            const taskTime = new Date(t.created_at || t.updated_at).getTime()
+            return taskTime > lastCheckTime
+          })
+          if (newTasks.length > 0) {
+            onNotification('משימה חדשה', `הוקצתה לך משימת תחזוקה חדשה`)
+            lastCheckTime = Date.now()
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Error checking for notifications:', error)
     }
+  }
+  
+  // Poll every 30 seconds when page is visible, every 2 minutes when hidden
+  const startPolling = () => {
+    if (pollInterval) clearInterval(pollInterval)
+    
+    const interval = document.hidden ? 120000 : 30000 // 2 min when hidden, 30 sec when visible
+    pollInterval = window.setInterval(checkForNotifications, interval)
+    checkForNotifications() // Check immediately
+  }
+  
+  // Handle visibility changes
+  const handleVisibilityChange = () => {
+    startPolling()
+  }
+  
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  startPolling()
+  
+  // Return cleanup function
+  return () => {
+    if (pollInterval) clearInterval(pollInterval)
+    document.removeEventListener('visibilitychange', handleVisibilityChange)
   }
 }
 

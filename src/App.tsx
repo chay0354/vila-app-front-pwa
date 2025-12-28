@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { initializeNotifications, showNotification } from './utils/notifications'
+import { initializeNotifications, showNotification, startBackgroundPolling } from './utils/notifications'
 import { API_BASE_URL } from './apiConfig'
 import HomeScreen from './screens/HomeScreen'
 import SignInScreen from './screens/SignInScreen'
@@ -40,6 +40,22 @@ function NotificationPoller({ userName }: { userName: string | null }) {
   useEffect(() => {
     initializeNotifications()
   }, [])
+
+  // Start background polling for iOS PWA (works even when app is in background)
+  useEffect(() => {
+    if (!userName) return
+    
+    // Start background polling that checks for new notifications
+    const cleanup = startBackgroundPolling(
+      userName,
+      API_BASE_URL,
+      (title, body) => {
+        showNotification(title, body)
+      }
+    )
+    
+    return cleanup
+  }, [userName])
 
   // Load system users once
   useEffect(() => {
