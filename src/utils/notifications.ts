@@ -113,57 +113,141 @@ export const getNotificationPermission = (): NotificationPermission | 'unknown' 
 }
 
 /**
+ * Get VAPID public key from backend
+ */
+async function getVapidPublicKey(apiBaseUrl: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${apiBaseUrl}/api/push/vapid-key`)
+    if (res.ok) {
+      const data = await res.json()
+      return data.publicKey || null
+    }
+  } catch (error) {
+    console.warn('Error fetching VAPID key:', error)
+  }
+  return null
+}
+
+/**
+ * Convert VAPID public key from base64 to Uint8Array
+ */
+function urlBase64ToUint8Array(base64String: string): ArrayBuffer {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4)
+  const base64 = (base64String + padding)
+    .replace(/\-/g, '+')
+    .replace(/_/g, '/')
+  
+  const rawData = window.atob(base64)
+  const outputArray = new Uint8Array(rawData.length)
+  
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i)
+  }
+  return outputArray.buffer
+}
+
+/**
  * Register Web Push subscription for background notifications
- * Simple version that works on iOS PWA
+ * Works on iOS 16.4+ PWA with proper Web Push API
  */
 export const registerPushSubscription = async (username: string, apiBaseUrl: string): Promise<void> => {
   if (typeof window === 'undefined') return
 
-  // Always register a device token (works on all platforms including iOS)
+  // Check if Web Push is supported (iOS 16.4+)
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    console.warn('Web Push not supported in this browser')
+    // Fallback: register device token
+    try {
+      const deviceId = `web-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      await fetch(`${apiBaseUrl}/push/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username,
+          token: deviceId,
+          platform: 'web',
+        }),
+      })
+    } catch (error) {
+      console.warn('Error registering fallback token:', error)
+    }
+    return
+  }
+
+  // Check notification permission
+  if (Notification.permission !== 'granted') {
+    console.warn('Notification permission not granted')
+    return
+  }
+
   try {
-    const deviceId = `web-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    // Get VAPID public key from backend
+    const vapidPublicKey = await getVapidPublicKey(apiBaseUrl)
+    
+    if (!vapidPublicKey) {
+      console.warn('VAPID public key not available, using fallback')
+      // Fallback to device token
+      const deviceId = `web-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      await fetch(`${apiBaseUrl}/push/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username,
+          token: deviceId,
+          platform: 'web',
+        }),
+      })
+      return
+    }
+
+    // Get service worker registration
+    const registration = await navigator.serviceWorker.ready
+
+    // Convert VAPID key to Uint8Array
+    const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey)
+
+    // Subscribe to push notifications with VAPID key
+    const subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: applicationServerKey,
+    })
+
+    // Convert subscription to base64 for backend
+    const subscriptionJson = JSON.stringify(subscription)
+    const token = btoa(subscriptionJson)
+
+    // Register with backend
     const res = await fetch(`${apiBaseUrl}/push/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         username,
-        token: deviceId,
+        token,
         platform: 'web',
       }),
     })
-    if (res.ok) {
-      console.log('Push token registered successfully for iOS PWA')
-    }
-  } catch (error) {
-    console.warn('Error registering push token:', error)
-  }
 
-  // Try Web Push subscription if supported (not available on iOS Safari)
-  if ('serviceWorker' in navigator && 'PushManager' in window && Notification.permission === 'granted') {
+    if (res.ok) {
+      console.log('Web Push subscription registered successfully (iOS 16.4+ compatible)')
+    } else {
+      console.warn('Failed to register Web Push subscription:', res.status)
+    }
+  } catch (error: any) {
+    console.warn('Error creating Web Push subscription:', error)
+    // Fallback: register device token
     try {
-      const registration = await navigator.serviceWorker.ready
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: null,
-      })
-      const subscriptionJson = JSON.stringify(subscription)
-      const token = btoa(subscriptionJson)
-      
-      const res = await fetch(`${apiBaseUrl}/push/register`, {
+      const deviceId = `web-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      await fetch(`${apiBaseUrl}/push/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username,
-          token,
+          token: deviceId,
           platform: 'web',
         }),
       })
-      if (res.ok) {
-        console.log('Web Push subscription registered')
-      }
-    } catch (error) {
-      // Web Push not supported (e.g., iOS Safari) - that's OK, we have device token
-      console.log('Web Push not available, using device token fallback')
+    } catch (fallbackError) {
+      console.warn('Error registering fallback token:', fallbackError)
     }
   }
 }
