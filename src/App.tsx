@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { initializeNotifications, showNotification } from './utils/notifications'
+import { initializeNotifications, showNotification, storeUserDataForBackgroundSync } from './utils/notifications'
 import { API_BASE_URL } from './apiConfig'
 import HomeScreen from './screens/HomeScreen'
 import SignInScreen from './screens/SignInScreen'
@@ -183,6 +183,11 @@ function App() {
       localStorage.setItem('userImageUrl', userImageUrl)
     } else {
       localStorage.removeItem('userImageUrl')
+    }
+    
+    // Store user data in IndexedDB for background sync
+    if (typeof window !== 'undefined' && userName) {
+      storeUserDataForBackgroundSync(userName)
     }
   }, [userName, userRole, userImageUrl])
 

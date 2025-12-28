@@ -31,6 +31,12 @@ export default defineConfig(({ mode }) => {
             }
           ]
         },
+        strategies: 'injectManifest',
+        srcDir: 'public',
+        filename: 'sw-custom.js',
+        injectManifest: {
+          injectionPoint: undefined,
+        },
         workbox: {
           runtimeCaching: [
             {
