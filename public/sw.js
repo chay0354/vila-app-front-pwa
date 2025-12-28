@@ -1,13 +1,10 @@
 // Custom service worker with push notification support
-// VitePWA will inject precaching code here via self.__WB_MANIFEST
-
 // Import Workbox
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js')
 
 // Precache assets (injected by VitePWA)
-if (self.__WB_MANIFEST) {
-  workbox.precaching.precacheAndRoute(self.__WB_MANIFEST)
-}
+// VitePWA will replace self.__WB_MANIFEST with the actual manifest array
+workbox.precaching.precacheAndRoute(self.__WB_MANIFEST)
 
 // Cache images
 workbox.routing.registerRoute(
