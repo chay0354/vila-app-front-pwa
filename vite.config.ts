@@ -11,6 +11,9 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       VitePWA({
+        strategies: 'injectManifest',
+        srcDir: 'public',
+        filename: 'sw.js',
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
         manifest: {
@@ -31,26 +34,8 @@ export default defineConfig(({ mode }) => {
             }
           ]
         },
-        strategies: 'injectManifest',
-        srcDir: 'public',
-        filename: 'sw-custom.js',
         injectManifest: {
-          injectionPoint: undefined,
-        },
-        workbox: {
-          runtimeCaching: [
-            {
-              urlPattern: /^https:\/\/.*\.(?:png|jpg|jpeg|svg|gif|webp)$/,
-              handler: 'CacheFirst',
-              options: {
-                cacheName: 'images-cache',
-                expiration: {
-                  maxEntries: 50,
-                  maxAgeSeconds: 60 * 60 * 24 * 30 // 30 days
-                }
-              }
-            }
-          ]
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,jpeg}']
         }
       })
     ],

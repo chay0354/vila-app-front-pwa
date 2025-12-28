@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { API_BASE_URL } from '../apiConfig'
+import { registerPushSubscription } from '../utils/notifications'
 import './SignInScreen.css'
 
 type SignInScreenProps = {
@@ -109,8 +110,9 @@ function SignInScreen({ mode = 'signin', onSignIn }: SignInScreenProps) {
       }
 
       // Success - set user and navigate to hub
+      const username = data.username || name.trim()
       onSignIn(
-        data.username || name.trim(),
+        username,
         data.role,
         data.image_url
       )
@@ -119,6 +121,10 @@ function SignInScreen({ mode = 'signin', onSignIn }: SignInScreenProps) {
       setConfirmPassword('')
       setImagePreview(null)
       setImageFile(null)
+      
+      // Register push notification subscription
+      registerPushSubscription(username, API_BASE_URL)
+      
       navigate('/hub')
     } catch (err: any) {
       console.error('Auth error:', err)
