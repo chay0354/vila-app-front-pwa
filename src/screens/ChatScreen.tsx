@@ -44,11 +44,11 @@ function ChatScreen({ userName }: ChatScreenProps) {
       }
       const data = await res.json()
       // Reverse to show oldest first (backend returns newest first)
-      const reversedMessages = (data ?? []).reverse()
+      const reversedMessages = ((data ?? []) as ChatMessage[]).reverse()
       
       // Only update if messages have actually changed (compare by IDs)
-      const currentMessageIds = messages.map(m => m.id).join(',')
-      const newMessageIds = reversedMessages.map(m => m.id).join(',')
+      const currentMessageIds = messages.map((m: ChatMessage) => m.id).join(',')
+      const newMessageIds = reversedMessages.map((m: ChatMessage) => m.id).join(',')
       
       if (currentMessageIds !== newMessageIds) {
         setMessages(reversedMessages)
