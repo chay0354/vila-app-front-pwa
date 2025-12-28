@@ -142,3 +142,18 @@
   margin-top: 4px;
 }
 
+.maintenance-loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #e2e8f0;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: maintenance-spin 0.6s linear infinite;
+}
+
+@keyframes maintenance-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+

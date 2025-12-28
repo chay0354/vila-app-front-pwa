@@ -14,20 +14,20 @@ export default defineConfig(({ mode }) => {
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
         manifest: {
-          name: 'BolaVila App',
-          short_name: 'BolaVila',
+          name: 'bola villa',
+          short_name: 'bola villa',
           description: 'ניהול מתחם נופש',
           theme_color: '#2563eb',
           icons: [
             {
-              src: 'pwa-192x192.png',
+              src: 'app-icon.jpg',
               sizes: '192x192',
-              type: 'image/png'
+              type: 'image/jpeg'
             },
             {
-              src: 'pwa-512x512.png',
+              src: 'app-icon.jpg',
               sizes: '512x512',
-              type: 'image/png'
+              type: 'image/jpeg'
             }
           ]
         },

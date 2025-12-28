@@ -439,7 +439,7 @@ function App() {
         <Route 
           path="/employee-management" 
           element={
-            userName && userRole === 'מנהל' ? (
+            userName && (userRole === 'מנהל ראשי' || userRole === 'מנהל הזמנות' || userRole === 'מנהל מתחם' || userRole === 'מנהל') ? (
               <EmployeeManagementScreen />
             ) : (
               <Navigate to="/hub" replace />

@@ -123,7 +123,8 @@ function EmployeeManagementScreen({}: EmployeeManagementScreenProps) {
 
   const employeesWithStats = useMemo(() => {
     // Filter to show only employees (not managers)
-    const employeeAccounts = employees.filter(emp => emp.role !== 'מנהל')
+    const managerRoles = ['מנהל', 'מנהל ראשי', 'מנהל הזמנות', 'מנהל מתחם'];
+    const employeeAccounts = employees.filter(emp => !managerRoles.includes(emp.role))
     
     return employeeAccounts.map(emp => {
       const logs = getFilteredLogs(emp.username)
@@ -225,6 +226,10 @@ function EmployeeManagementScreen({}: EmployeeManagementScreenProps) {
                 </div>
                 <div className="employee-info">
                   <h3 className="employee-name">{emp.username}</h3>
+                  <div className="employee-time-info">
+                    <span className="employee-time-label">שעות עבודה:</span>
+                    <span className="employee-time-value">{emp.hours} שעות</span>
+                  </div>
                 </div>
               </div>
 

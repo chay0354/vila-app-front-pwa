@@ -13,7 +13,7 @@ function SignInScreen({ mode = 'signin', onSignIn }: SignInScreenProps) {
   const [name, setName] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [role, setRole] = useState<'עובד תחזוקה' | 'מנהל'>('עובד תחזוקה')
+  const [role, setRole] = useState<'עובד תחזוקה' | 'עובד שעתי' | 'מנהל ראשי' | 'מנהל הזמנות' | 'מנהל מתחם'>('עובד תחזוקה')
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [imageFile, setImageFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -181,11 +181,14 @@ function SignInScreen({ mode = 'signin', onSignIn }: SignInScreenProps) {
                 <select
                   className="signin-input"
                   value={role}
-                  onChange={(e) => setRole(e.target.value as 'עובד תחזוקה' | 'מנהל')}
+                  onChange={(e) => setRole(e.target.value as 'עובד תחזוקה' | 'עובד שעתי' | 'מנהל ראשי' | 'מנהל הזמנות' | 'מנהל מתחם')}
                   dir="rtl"
                 >
                   <option value="עובד תחזוקה">עובד תחזוקה</option>
-                  <option value="מנהל">מנהל</option>
+                  <option value="עובד שעתי">עובד שעתי</option>
+                  <option value="מנהל ראשי">מנהל ראשי</option>
+                  <option value="מנהל הזמנות">מנהל הזמנות</option>
+                  <option value="מנהל מתחם">מנהל מתחם</option>
                 </select>
               </div>
               

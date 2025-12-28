@@ -24,6 +24,14 @@ type HubScreenProps = {
 }
 
 function HubScreen({ userName, userRole, userImageUrl, onSignOut }: HubScreenProps) {
+  // Helper function to check if user is a manager (can see everything)
+  const isManager = (role: string | null | undefined): boolean => {
+    if (!role) return false;
+    return role === 'מנהל ראשי' || role === 'מנהל הזמנות' || role === 'מנהל מתחם' || role === 'מנהל';
+  };
+  
+  const canSeeEverything = isManager(userRole);
+  
   const navigate = useNavigate()
   const [orders, setOrders] = useState<Order[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
@@ -132,7 +140,7 @@ function HubScreen({ userName, userRole, userImageUrl, onSignOut }: HubScreenPro
           </div>
         </div>
 
-        {userRole === 'מנהל' && (
+        {canSeeEverything && (
           <div className="hub-stats-grid">
             <div className="hub-stat-card hub-stat-card-blue">
               <div className="hub-stat-value">{totals.count}</div>
@@ -170,7 +178,7 @@ function HubScreen({ userName, userRole, userImageUrl, onSignOut }: HubScreenPro
         <div className="hub-quick-actions">
           <h2 className="hub-section-title">אפשרויות</h2>
           <div className="hub-quick-actions-row">
-            {userRole === 'מנהל' && (
+            {canSeeEverything && (
               <button
                 className="hub-quick-action-btn hub-quick-action-blue"
                 onClick={() => navigate('/orders')}
@@ -220,7 +228,7 @@ function HubScreen({ userName, userRole, userImageUrl, onSignOut }: HubScreenPro
               <span className="hub-quick-action-icon">🛠️</span>
               <span className="hub-quick-action-text">תחזוקה</span>
             </button>
-            {userRole === 'מנהל' && (
+            {canSeeEverything && (
               <>
                 <button
                   className="hub-quick-action-btn hub-quick-action-indigo"
@@ -240,7 +248,7 @@ function HubScreen({ userName, userRole, userImageUrl, onSignOut }: HubScreenPro
                 </button>
               </>
             )}
-            {userRole === 'מנהל' ? (
+            {canSeeEverything ? (
               <button
                 className="hub-quick-action-btn hub-quick-action-pink"
                 onClick={() => navigate('/employee-management')}

@@ -124,6 +124,24 @@
   text-align: right;
 }
 
+.employee-time-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.employee-time-label {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.employee-time-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
 .employee-wage-section {
   padding: 12px 0;
   border-top: 1px solid #e2e8f0;

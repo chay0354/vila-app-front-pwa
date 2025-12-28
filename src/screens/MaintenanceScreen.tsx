@@ -12,6 +12,7 @@ type MaintenanceScreenProps = {
 function MaintenanceScreen({}: MaintenanceScreenProps) {
   const navigate = useNavigate()
   const [units, setUnits] = useState<MaintenanceUnit[]>(getInitialMaintenanceUnits())
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     loadMaintenanceUnits()
@@ -19,8 +20,17 @@ function MaintenanceScreen({}: MaintenanceScreenProps) {
 
   const loadMaintenanceUnits = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/maintenance/tasks`)
-      if (!res.ok) return
+      setIsLoading(true)
+      // Set a minimum loading time for better UX (300ms)
+      const loadingPromise = new Promise(resolve => setTimeout(resolve, 300))
+      
+      const fetchPromise = fetch(`${API_BASE_URL}/api/maintenance/tasks`)
+      
+      const [res] = await Promise.all([fetchPromise, loadingPromise])
+      if (!res.ok) {
+        setIsLoading(false)
+        return
+      }
       const data = (await res.json()) || []
 
       // Keep the 10 units always visible, and attach tasks by unit_id
@@ -53,8 +63,10 @@ function MaintenanceScreen({}: MaintenanceScreenProps) {
       })
 
       setUnits(baseUnits)
+      setIsLoading(false)
     } catch (err) {
       console.error('Error loading maintenance units:', err)
+      setIsLoading(false)
     }
   }
 
@@ -63,6 +75,9 @@ function MaintenanceScreen({}: MaintenanceScreenProps) {
     const closed = unit.tasks.filter(t => t.status === 'סגור').length
     return { open, closed, total: unit.tasks.length }
   }
+
+  // Check if data has been loaded (any unit has tasks or we've attempted to load)
+  const hasLoadedData = units.some(u => u.tasks.length > 0) || !isLoading
 
   return (
     <div className="maintenance-container">
@@ -100,22 +115,30 @@ function MaintenanceScreen({}: MaintenanceScreenProps) {
                   </div>
                 </div>
                 <div className="maintenance-unit-stats">
-                  <div className="maintenance-unit-stat-item">
-                    <span className="maintenance-unit-stat-value">{stats.total}</span>
-                    <span className="maintenance-unit-stat-label">סה״כ משימות</span>
-                  </div>
-                  <div className="maintenance-unit-stat-item">
-                    <span className="maintenance-unit-stat-value" style={{ color: '#f59e0b' }}>
-                      {stats.open}
-                    </span>
-                    <span className="maintenance-unit-stat-label">פתוחות</span>
-                  </div>
-                  <div className="maintenance-unit-stat-item">
-                    <span className="maintenance-unit-stat-value" style={{ color: '#22c55e' }}>
-                      {stats.closed}
-                    </span>
-                    <span className="maintenance-unit-stat-label">סגורות</span>
-                  </div>
+                  {isLoading && !hasLoadedData ? (
+                    <div className="maintenance-unit-stat-item" style={{ width: '100%', alignItems: 'center', padding: '8px 0' }}>
+                      <div className="maintenance-loading-spinner"></div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="maintenance-unit-stat-item">
+                        <span className="maintenance-unit-stat-value">{stats.total}</span>
+                        <span className="maintenance-unit-stat-label">סה״כ משימות</span>
+                      </div>
+                      <div className="maintenance-unit-stat-item">
+                        <span className="maintenance-unit-stat-value" style={{ color: '#f59e0b' }}>
+                          {stats.open}
+                        </span>
+                        <span className="maintenance-unit-stat-label">פתוחות</span>
+                      </div>
+                      <div className="maintenance-unit-stat-item">
+                        <span className="maintenance-unit-stat-value" style={{ color: '#22c55e' }}>
+                          {stats.closed}
+                        </span>
+                        <span className="maintenance-unit-stat-label">סגורות</span>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             )
