@@ -141,5 +141,40 @@ self.addEventListener('message', (event) => {
       console.log(`Sent push event count to page: ${pushEventCount}`);
     }
   }
+  
+  if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
+    // Show notification directly from page (for testing)
+    console.log('🔔 Direct notification request received:', event.data.notification);
+    const notificationData = event.data.notification || {
+      title: 'Direct Test Notification',
+      body: 'This notification was triggered directly from the browser!',
+      icon: '/app-icon.jpg',
+      badge: '/app-icon.jpg',
+      tag: 'direct-test'
+    };
+    
+    self.registration.showNotification(notificationData.title, {
+      body: notificationData.body,
+      icon: notificationData.icon || '/app-icon.jpg',
+      badge: notificationData.badge || '/app-icon.jpg',
+      tag: notificationData.tag || 'direct-test',
+      requireInteraction: notificationData.requireInteraction || false,
+      silent: false,
+      data: notificationData.data || {},
+      vibrate: [200, 100, 200],
+      timestamp: Date.now(),
+    }).then(() => {
+      console.log('✅ Direct notification displayed successfully');
+      // Send response back if port is available
+      if (event.ports && event.ports[0]) {
+        event.ports[0].postMessage({ success: true, message: 'Notification displayed' });
+      }
+    }).catch((error) => {
+      console.error('❌ Error showing direct notification:', error);
+      if (event.ports && event.ports[0]) {
+        event.ports[0].postMessage({ success: false, error: error.message });
+      }
+    });
+  }
 });
 

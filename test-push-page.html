@@ -115,6 +115,7 @@
             <button id="subscribe" disabled>2. Subscribe to Push</button>
             <button id="checkSubscription">Check Subscription</button>
             <button id="registerWithBackend" style="display: none;">Register with Backend</button>
+            <button id="testDirectNotification" style="background: #28a745; display: none;">🔔 Test Direct Notification</button>
         </div>
         
         <div id="subscriptionInfo" class="info-box" style="display: none;">
@@ -333,6 +334,9 @@ Make sure:
                 `;
                 document.getElementById('subscriptionInfo').style.display = 'block';
                 
+                // Show direct test button
+                document.getElementById('testDirectNotification').style.display = 'inline-block';
+                
                 // Register with backend (prompt for username)
                 const username = prompt('Enter your username to register this subscription with the backend:');
                 if (username) {
@@ -411,6 +415,8 @@ Make sure:
                     log('✅ Subscription registered with backend!');
                     showStatus('✅ Subscription registered! Now close this tab and send a test notification.', 'success');
                     document.getElementById('registerWithBackend').style.display = 'none';
+                    // Show direct test button
+                    document.getElementById('testDirectNotification').style.display = 'inline-block';
                 } else {
                     const error = await registerRes.text();
                     log(`❌ Backend registration failed: ${error}`);
@@ -418,6 +424,60 @@ Make sure:
                 }
             } catch (error) {
                 log(`❌ Error: ${error.message}`);
+                showStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        });
+
+        // Test direct notification (bypasses backend)
+        document.getElementById('testDirectNotification').addEventListener('click', async () => {
+            try {
+                if (!('serviceWorker' in navigator)) {
+                    showStatus('❌ Service workers not supported', 'error');
+                    return;
+                }
+
+                if (Notification.permission !== 'granted') {
+                    showStatus('❌ Notification permission not granted', 'error');
+                    return;
+                }
+
+                log('Testing direct notification...');
+                showStatus('Testing direct notification...', 'info');
+
+                // Get service worker registration
+                registration = await navigator.serviceWorker.ready;
+                
+                // Send a message to service worker to show notification
+                registration.active.postMessage({
+                    type: 'SHOW_NOTIFICATION',
+                    notification: {
+                        title: 'Direct Test Notification',
+                        body: 'This notification was triggered directly from the browser!',
+                        icon: '/app-icon.jpg',
+                        badge: '/app-icon.jpg',
+                        tag: 'direct-test',
+                        requireInteraction: false
+                    }
+                });
+
+                log('✅ Message sent to service worker');
+                showStatus('✅ Notification request sent! Check if it appears.', 'success');
+
+                // Also try showing notification directly (fallback)
+                setTimeout(() => {
+                    if ('Notification' in window && Notification.permission === 'granted') {
+                        new Notification('Direct Test Notification (Fallback)', {
+                            body: 'This is a direct browser notification (not via service worker)',
+                            icon: '/app-icon.jpg',
+                            badge: '/app-icon.jpg',
+                            tag: 'direct-fallback'
+                        });
+                        log('✅ Fallback notification also sent');
+                    }
+                }, 500);
+
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
                 showStatus(`❌ Error: ${error.message}`, 'error');
             }
         });
@@ -450,6 +510,8 @@ Make sure:
                     log('Existing subscription found');
                     // Show register button
                     document.getElementById('registerWithBackend').style.display = 'inline-block';
+                    // Show direct test button
+                    document.getElementById('testDirectNotification').style.display = 'inline-block';
                 } else {
                     showStatus('⚠️ No subscription found. Click "Subscribe to Push" first.', 'info');
                     log('No subscription found');
