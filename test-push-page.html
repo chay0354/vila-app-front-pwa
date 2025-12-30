@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Push Notification Tester</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .info-box {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+            border-left: 4px solid #007bff;
+        }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        .log {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔔 Push Notification Tester</h1>
+        <p>Test push notifications locally - even when the app is closed!</p>
+        
+        <div id="status"></div>
+        
+        <div class="info-box">
+            <strong>⚠️ IMPORTANT:</strong> This page must be served over HTTP (not file://).<br>
+            <strong>To serve this page:</strong>
+            <ul>
+                <li>Run: <code>.\serve-test-page.ps1</code> (in PowerShell)</li>
+                <li>Or use your PWA dev server: <code>npm run dev</code></li>
+                <li>Then open: <code>http://localhost:8080/test-push-page.html</code></li>
+            </ul>
+            <strong>Instructions:</strong>
+            <ol>
+                <li>Click "Request Permission" and allow notifications</li>
+                <li>Click "Subscribe to Push" to register</li>
+                <li><strong>Close this browser tab completely</strong></li>
+                <li>Run: <code>.\send-test-push.ps1 -Username your_username</code></li>
+                <li>Check your system notification center!</li>
+            </ol>
+        </div>
+        
+        <div>
+            <button id="requestPermission">1. Request Permission</button>
+            <button id="subscribe" disabled>2. Subscribe to Push</button>
+            <button id="checkSubscription">Check Subscription</button>
+            <button id="registerWithBackend" style="display: none;">Register with Backend</button>
+        </div>
+        
+        <div id="subscriptionInfo" class="info-box" style="display: none;">
+            <strong>Subscription Status:</strong>
+            <div id="subDetails"></div>
+        </div>
+        
+        <div class="log" id="log"></div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://127.0.0.1:4000';
+        let registration = null;
+        let subscription = null;
+        let permissionGranted = false; // Track if permission was granted
+
+        function log(message, type = 'info') {
+            const logEl = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            logEl.innerHTML += `[${time}] ${message}<br>`;
+            logEl.scrollTop = logEl.scrollHeight;
+            console.log(message);
+        }
+
+        function showStatus(message, type = 'info') {
+            const statusEl = document.getElementById('status');
+            statusEl.className = `status ${type}`;
+            statusEl.textContent = message;
+        }
+
+        // Check notification permission
+        function checkPermission() {
+            if ('Notification' in window) {
+                const permission = Notification.permission;
+                log(`Notification permission: ${permission}`);
+                if (permission === 'granted') {
+                    permissionGranted = true; // Update our stored value
+                    // Only enable if not already enabled (don't disable if already enabled)
+                    const subscribeBtn = document.getElementById('subscribe');
+                    if (subscribeBtn.disabled) {
+                        subscribeBtn.disabled = false;
+                        showStatus('✅ Notification permission granted - Click "Subscribe to Push"', 'success');
+                    }
+                } else if (permission === 'denied') {
+                    permissionGranted = false;
+                    document.getElementById('subscribe').disabled = true;
+                    showStatus('❌ Notification permission denied', 'error');
+                } else {
+                    // Don't disable if button is already enabled (might be enabled from permission request)
+                    const subscribeBtn = document.getElementById('subscribe');
+                    if (!subscribeBtn.disabled && !permissionGranted) {
+                        // Button is enabled but permission not granted - this shouldn't happen
+                        log('Warning: Button enabled but permission not granted. This might be a timing issue.');
+                    }
+                    showStatus('⚠️ Notification permission not requested', 'info');
+                }
+                return permission;
+            } else {
+                permissionGranted = false;
+                document.getElementById('subscribe').disabled = true;
+                showStatus('❌ Notifications not supported', 'error');
+                return null;
+            }
+        }
+
+        // Request notification permission
+        document.getElementById('requestPermission').addEventListener('click', async () => {
+            if (!('Notification' in window)) {
+                showStatus('❌ Notifications not supported in this browser', 'error');
+                return;
+            }
+
+            try {
+                const permission = await Notification.requestPermission();
+                log(`Permission result: ${permission}`);
+                
+                // Update permission status immediately - don't rely on Notification.permission
+                if (permission === 'granted') {
+                    permissionGranted = true; // Store that permission was granted
+                    document.getElementById('subscribe').disabled = false;
+                    showStatus('✅ Notification permission granted - Click "Subscribe to Push"', 'success');
+                    log('✅ Permission granted! You can now subscribe to push notifications.');
+                    log('Button should now be enabled - try clicking "Subscribe to Push"');
+                } else if (permission === 'denied') {
+                    permissionGranted = false;
+                    document.getElementById('subscribe').disabled = true;
+                    showStatus('❌ Notification permission denied', 'error');
+                    log('❌ Permission denied. Please enable notifications in browser settings.');
+                } else {
+                    permissionGranted = false;
+                    document.getElementById('subscribe').disabled = true;
+                    showStatus('⚠️ Notification permission not granted', 'info');
+                    log('⚠️ Permission not granted');
+                }
+                
+                // Don't call checkPermission() here - it might read stale Notification.permission
+                // The button state is already set correctly above
+            } catch (error) {
+                log(`Error requesting permission: ${error}`, 'error');
+                showStatus('❌ Error requesting permission', 'error');
+            }
+        });
+
+        // Register service worker and subscribe
+        document.getElementById('subscribe').addEventListener('click', async () => {
+            // Check if permission was granted (use our stored value, not Notification.permission which may be stale)
+            if (!permissionGranted && Notification.permission !== 'granted') {
+                showStatus('❌ Notification permission not granted. Please click "Request Permission" first.', 'error');
+                log('❌ Permission check failed. Current permission: ' + Notification.permission);
+                log('💡 Tip: If you just granted permission, wait a moment and try again.');
+                return;
+            }
+            
+            // If button is disabled, don't proceed
+            if (document.getElementById('subscribe').disabled) {
+                showStatus('❌ Subscribe button is disabled. Please grant permission first.', 'error');
+                log('❌ Button is disabled. Please click "Request Permission" first.');
+                return;
+            }
+            
+            if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+                showStatus('❌ Web Push not supported', 'error');
+                return;
+            }
+
+            try {
+                // Check if we're on file:// protocol (not supported)
+                if (window.location.protocol === 'file:') {
+                    throw new Error('Service workers require HTTP/HTTPS. Please serve this page over HTTP. Run: .\\serve-test-page.ps1');
+                }
+                
+                // Register service worker
+                // In Vite with injectManifest, the service worker needs to be built
+                // But in dev mode, we can try to register the source file
+                // First, let's check if the service worker file is accessible
+                log('Checking if service worker file is accessible...');
+                
+                const swPaths = [
+                    '/sw-simple.js',    // Simple test service worker (no Workbox dependency)
+                    '/sw.js',           // Vite serves public/sw.js at /sw.js (after build)
+                    '/public/sw.js',    // Direct path to public folder
+                    './sw.js',          // Relative path
+                ];
+                
+                let registered = false;
+                let lastError = null;
+                
+                // First, try to fetch the service worker to see if it exists
+                for (const swPath of swPaths) {
+                    try {
+                        const response = await fetch(swPath, { method: 'HEAD' });
+                        if (response.ok) {
+                            log(`✅ Service worker file found at: ${swPath}`);
+                            try {
+                                registration = await navigator.serviceWorker.register(swPath, {
+                                    scope: '/'  // Register at root scope
+                                });
+                                log(`✅ Service worker registered successfully at: ${swPath}`);
+                                registered = true;
+                                break;
+                            } catch (regError) {
+                                log(`❌ Registration failed at ${swPath}: ${regError.message}`);
+                                lastError = regError;
+                            }
+                        } else {
+                            log(`❌ Service worker not found at: ${swPath} (${response.status})`);
+                        }
+                    } catch (fetchError) {
+                        log(`❌ Could not check ${swPath}: ${fetchError.message}`);
+                        lastError = fetchError;
+                    }
+                }
+                
+                if (!registered) {
+                    const errorMsg = lastError ? lastError.message : 'Unknown error';
+                    throw new Error(`Could not register service worker. Last error: ${errorMsg}. 
+                    
+Make sure:
+1. Vite dev server is running (npm run dev)
+2. Service worker exists at public/sw.js
+3. Try accessing http://localhost:5173/sw.js directly in browser`);
+                }
+                
+                await navigator.serviceWorker.ready;
+                log('Service worker ready');
+
+                // Get VAPID key
+                const vapidRes = await fetch(`${API_BASE_URL}/api/push/vapid-key`);
+                const vapidData = await vapidRes.json();
+                const vapidKey = vapidData.publicKey;
+                log(`VAPID key received: ${vapidKey.substring(0, 20)}...`);
+
+                // Convert VAPID key
+                const applicationServerKey = urlBase64ToUint8Array(vapidKey);
+
+                // Subscribe
+                subscription = await registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: applicationServerKey
+                });
+
+                log('Push subscription created!');
+                
+                // Convert subscription to format for backend
+                const subInfo = {
+                    endpoint: subscription.endpoint,
+                    keys: {
+                        p256dh: arrayBufferToBase64(subscription.getKey('p256dh')),
+                        auth: arrayBufferToBase64(subscription.getKey('auth'))
+                    }
+                };
+                
+                // Show subscription details
+                document.getElementById('subDetails').innerHTML = `
+                    <pre>${JSON.stringify(subInfo, null, 2)}</pre>
+                `;
+                document.getElementById('subscriptionInfo').style.display = 'block';
+                
+                // Register with backend (prompt for username)
+                const username = prompt('Enter your username to register this subscription with the backend:');
+                if (username) {
+                    try {
+                        log(`Registering subscription with backend for user: ${username}...`);
+                        const registerRes = await fetch(`${API_BASE_URL}/push/register`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                username: username,
+                                token: JSON.stringify(subInfo), // Send as JSON string
+                                platform: 'web'
+                            })
+                        });
+                        
+                        if (registerRes.ok) {
+                            const result = await registerRes.json();
+                            log('✅ Subscription registered with backend!');
+                            showStatus('✅ Push subscription created and registered! Now close this tab and send a test notification.', 'success');
+                        } else {
+                            const error = await registerRes.text();
+                            log(`⚠️ Backend registration failed: ${error}`);
+                            showStatus('⚠️ Subscription created but backend registration failed. You can still test manually.', 'info');
+                        }
+                    } catch (regError) {
+                        log(`⚠️ Error registering with backend: ${regError.message}`);
+                        showStatus('⚠️ Subscription created but backend registration failed. You can still test manually.', 'info');
+                    }
+                } else {
+                    log('⚠️ Username not provided - subscription not registered with backend');
+                    showStatus('✅ Push subscription created! Click "Register with Backend" to register it.', 'info');
+                    // Show register button
+                    document.getElementById('registerWithBackend').style.display = 'inline-block';
+                }
+                
+            } catch (error) {
+                log(`Error: ${error.message}`, 'error');
+                showStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        });
+
+        // Register subscription with backend
+        document.getElementById('registerWithBackend').addEventListener('click', async () => {
+            if (!subscription) {
+                showStatus('❌ No subscription found. Please subscribe first.', 'error');
+                return;
+            }
+            
+            const username = prompt('Enter your username to register this subscription:');
+            if (!username) {
+                return;
+            }
+            
+            try {
+                const subInfo = {
+                    endpoint: subscription.endpoint,
+                    keys: {
+                        p256dh: arrayBufferToBase64(subscription.getKey('p256dh')),
+                        auth: arrayBufferToBase64(subscription.getKey('auth'))
+                    }
+                };
+                
+                log(`Registering subscription with backend for user: ${username}...`);
+                const registerRes = await fetch(`${API_BASE_URL}/push/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: username,
+                        token: JSON.stringify(subInfo),
+                        platform: 'web'
+                    })
+                });
+                
+                if (registerRes.ok) {
+                    const result = await registerRes.json();
+                    log('✅ Subscription registered with backend!');
+                    showStatus('✅ Subscription registered! Now close this tab and send a test notification.', 'success');
+                    document.getElementById('registerWithBackend').style.display = 'none';
+                } else {
+                    const error = await registerRes.text();
+                    log(`❌ Backend registration failed: ${error}`);
+                    showStatus('❌ Registration failed. Check console for details.', 'error');
+                }
+            } catch (error) {
+                log(`❌ Error: ${error.message}`);
+                showStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        });
+
+        // Check existing subscription
+        document.getElementById('checkSubscription').addEventListener('click', async () => {
+            try {
+                if (!('serviceWorker' in navigator)) {
+                    showStatus('❌ Service workers not supported', 'error');
+                    return;
+                }
+
+                registration = await navigator.serviceWorker.ready;
+                subscription = await registration.pushManager.getSubscription();
+                
+                if (subscription) {
+                    const subInfo = {
+                        endpoint: subscription.endpoint,
+                        keys: {
+                            p256dh: arrayBufferToBase64(subscription.getKey('p256dh')),
+                            auth: arrayBufferToBase64(subscription.getKey('auth'))
+                        }
+                    };
+                    
+                    document.getElementById('subDetails').innerHTML = `
+                        <pre>${JSON.stringify(subInfo, null, 2)}</pre>
+                    `;
+                    document.getElementById('subscriptionInfo').style.display = 'block';
+                    showStatus('✅ Subscription found! Click "Register with Backend" to register it.', 'success');
+                    log('Existing subscription found');
+                    // Show register button
+                    document.getElementById('registerWithBackend').style.display = 'inline-block';
+                } else {
+                    showStatus('⚠️ No subscription found. Click "Subscribe to Push" first.', 'info');
+                    log('No subscription found');
+                }
+            } catch (error) {
+                log(`Error: ${error.message}`, 'error');
+                showStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        });
+
+        // Helper functions
+        function urlBase64ToUint8Array(base64String) {
+            const padding = '='.repeat((4 - base64String.length % 4) % 4);
+            const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+            const rawData = window.atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) {
+                outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray;
+        }
+
+        function arrayBufferToBase64(buffer) {
+            const bytes = new Uint8Array(buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.byteLength; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return window.btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+        }
+
+        // Initialize
+        checkPermission();
+        log('Push notification tester ready');
+        log('Make sure backend is running on http://127.0.0.1:4000');
+        
+        // Debug helper - expose to window for console testing
+        window.debugPush = {
+            checkPermission: () => {
+                const perm = Notification.permission;
+                const btn = document.getElementById('subscribe');
+                console.log('Permission:', perm);
+                console.log('Button disabled:', btn.disabled);
+                console.log('Service Worker:', 'serviceWorker' in navigator);
+                console.log('Push Manager:', 'PushManager' in window);
+                if (perm === 'granted' && btn.disabled) {
+                    console.log('Fixing button state...');
+                    btn.disabled = false;
+                }
+                return { permission: perm, buttonDisabled: btn.disabled };
+            },
+            enableSubscribe: () => {
+                document.getElementById('subscribe').disabled = false;
+                console.log('Subscribe button manually enabled');
+            }
+        };
+        log('Debug helper available: window.debugPush.checkPermission() or window.debugPush.enableSubscribe()');
+        
+        // Also check permission periodically in case it changes
+        setInterval(() => {
+            const subscribeBtn = document.getElementById('subscribe');
+            if (Notification.permission === 'granted') {
+                permissionGranted = true; // Update stored value
+                if (subscribeBtn.disabled) {
+                    log('Permission detected as granted - enabling subscribe button');
+                    subscribeBtn.disabled = false;
+                    showStatus('✅ Notification permission granted - Click "Subscribe to Push"', 'success');
+                }
+            }
+        }, 500);
+    </script>
+</body>
+</html>
+
