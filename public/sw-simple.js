@@ -3,10 +3,19 @@
 
 console.log('Simple service worker loaded');
 
+// Track push events received
+let pushEventCount = 0;
+
 // Push notification handler - Works even when app is closed (iOS 16.4+)
 self.addEventListener('push', (event) => {
-  console.log('Push notification received:', event);
+  pushEventCount++;
+  console.log('🔔 PUSH EVENT RECEIVED!', event);
+  console.log(`📊 Total push events received: ${pushEventCount}`);
   console.log('App state: Service Worker active (works even when app is closed)');
+  console.log('Event data:', event.data ? 'Has data' : 'No data');
+  
+  // Store count in storage for page to retrieve
+  // This helps verify push events are received when tab is closed
   
   let notificationData = {
     title: 'Test Notification',
@@ -58,9 +67,10 @@ self.addEventListener('push', (event) => {
       vibrate: [200, 100, 200],
       timestamp: Date.now(),
     }).then(() => {
-      console.log('Notification displayed successfully');
+      console.log('✅ Notification displayed successfully');
     }).catch((error) => {
-      console.error('Error showing notification:', error);
+      console.error('❌ Error showing notification:', error);
+      console.error('Error details:', error.message, error.stack);
     })
   );
 });
@@ -107,7 +117,29 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   console.log('Service worker activating...');
   event.waitUntil(clients.claim()); // Take control of all pages immediately
+  console.log('Service worker activated and ready');
 });
 
 console.log('Service worker script loaded successfully');
+
+// Listen for messages from the page
+self.addEventListener('message', (event) => {
+  console.log('Service worker received message:', event.data);
+  
+  if (event.data && event.data.type === 'TEST') {
+    console.log('Test message received:', event.data.message);
+    // Send response back if port is available
+    if (event.ports && event.ports[0]) {
+      event.ports[0].postMessage({ success: true, message: 'Service worker is working!' });
+    }
+  }
+  
+  if (event.data && event.data.type === 'GET_PUSH_COUNT') {
+    // Send push event count back to page
+    if (event.ports && event.ports[0]) {
+      event.ports[0].postMessage({ pushEventCount: pushEventCount });
+      console.log(`Sent push event count to page: ${pushEventCount}`);
+    }
+  }
+});
 

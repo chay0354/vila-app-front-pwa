@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Push Reception</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .log {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Verify Push Event Reception</h1>
+        <p>This page helps verify if push events are reaching the service worker when the tab is closed.</p>
+        
+        <div id="status"></div>
+        
+        <div>
+            <button onclick="setupListener()">1. Setup Service Worker Listener</button>
+            <button onclick="checkSubscription()">2. Check Subscription</button>
+            <button onclick="sendTestNotification()">3. Send Test Notification</button>
+        </div>
+        
+        <div class="log" id="log"></div>
+        
+        <div style="margin-top: 20px; padding: 15px; background: #fff3cd; border-radius: 5px;">
+            <strong>Instructions:</strong>
+            <ol>
+                <li>Click "Setup Service Worker Listener"</li>
+                <li>Click "Check Subscription" to verify you have one</li>
+                <li><strong>Close this browser tab completely</strong></li>
+                <li>Send notification: <code>.\send-test-push.ps1 -Username test21</code></li>
+                <li><strong>Reopen this page</strong> and check the log</li>
+                <li>Or check service worker console: F12 → Application → Service Workers → inspect</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://127.0.0.1:4000';
+        let registration = null;
+        let subscription = null;
+        let pushEventCount = 0;
+
+        function log(msg) {
+            const logEl = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            logEl.innerHTML += `[${time}] ${msg}<br>`;
+            logEl.scrollTop = logEl.scrollHeight;
+            console.log(msg);
+        }
+
+        function showStatus(msg, type) {
+            const statusEl = document.getElementById('status');
+            statusEl.className = `status ${type}`;
+            statusEl.textContent = msg;
+        }
+
+        async function setupListener() {
+            log('Setting up service worker listener...');
+            
+            if (!('serviceWorker' in navigator)) {
+                log('❌ Service workers not supported');
+                return;
+            }
+
+            try {
+                registration = await navigator.serviceWorker.ready;
+                log('✅ Service worker ready');
+                
+                // Check for existing subscription
+                subscription = await registration.pushManager.getSubscription();
+                if (subscription) {
+                    log('✅ Push subscription found');
+                    log(`Endpoint: ${subscription.endpoint.substring(0, 50)}...`);
+                } else {
+                    log('❌ No push subscription found');
+                    showStatus('No subscription - subscribe first on test-push-page.html', 'error');
+                    return;
+                }
+                
+                // Store push event count in service worker message
+                // The service worker will increment this when it receives a push
+                log('✅ Listener setup complete');
+                log('💡 Now close this tab and send a notification');
+                log('💡 Then reopen this page to see if push events were received');
+                
+                showStatus('✅ Listener ready. Close tab and send notification, then reopen this page.', 'success');
+            } catch (error) {
+                log(`❌ Error: ${error.message}`);
+                showStatus(`Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function checkSubscription() {
+            log('Checking push subscription...');
+            
+            try {
+                const reg = await navigator.serviceWorker.ready;
+                const sub = await reg.pushManager.getSubscription();
+                
+                if (sub) {
+                    log('✅ Subscription exists');
+                    log(`Endpoint: ${sub.endpoint}`);
+                    
+                    // Check if it's registered with backend
+                    try {
+                        const response = await fetch(`${API_BASE_URL}/api/push/send`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                title: 'Test',
+                                body: 'Checking subscription',
+                                username: 'test21'
+                            })
+                        });
+                        const result = await response.json();
+                        log(`Backend response: ${JSON.stringify(result)}`);
+                        if (result.sent > 0) {
+                            log('✅ Subscription is registered with backend');
+                        } else {
+                            log('⚠️ Subscription exists but backend has no tokens for test21');
+                        }
+                    } catch (e) {
+                        log(`⚠️ Could not verify with backend: ${e.message}`);
+                    }
+                } else {
+                    log('❌ No subscription found');
+                    showStatus('No subscription - go to test-push-page.html to subscribe', 'error');
+                }
+            } catch (error) {
+                log(`❌ Error: ${error.message}`);
+            }
+        }
+
+        async function sendTestNotification() {
+            log('Sending test notification...');
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/push/send`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Test Notification',
+                        body: 'This is a test - check if you see it!',
+                        username: 'test21'
+                    })
+                });
+                
+                const result = await response.json();
+                log(`✅ Notification sent: ${JSON.stringify(result)}`);
+                
+                if (result.sent > 0) {
+                    showStatus('✅ Notification sent! Check if it appears (or check service worker console)', 'success');
+                    log('💡 If notification doesn\'t appear:');
+                    log('   1. Check service worker console: F12 → Application → Service Workers → inspect');
+                    log('   2. Look for "🔔 PUSH EVENT RECEIVED!" message');
+                    log('   3. Check Chrome notification settings: chrome://settings/content/notifications');
+                } else {
+                    showStatus('⚠️ Backend sent but no devices received it', 'info');
+                }
+            } catch (error) {
+                log(`❌ Error: ${error.message}`);
+                showStatus(`Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Check on page load if service worker received any push events
+        window.addEventListener('load', async () => {
+            log('Page loaded - checking service worker status...');
+            
+            try {
+                const reg = await navigator.serviceWorker.ready;
+                log('Service worker is ready');
+                
+                // Try to get push event count from service worker
+                const channel = new MessageChannel();
+                channel.port1.onmessage = (event) => {
+                    if (event.data.pushEventCount !== undefined) {
+                        log(`📊 Service worker has received ${event.data.pushEventCount} push events`);
+                        if (event.data.pushEventCount > 0) {
+                            showStatus(`✅ Service worker received ${event.data.pushEventCount} push event(s)!`, 'success');
+                        }
+                    }
+                };
+                
+                if (reg.active) {
+                    reg.active.postMessage({ type: 'GET_PUSH_COUNT' }, [channel.port2]);
+                }
+            } catch (e) {
+                log(`Could not check service worker: ${e.message}`);
+            }
+        });
+
+        log('Verification page ready');
+    </script>
+</body>
+</html>
+
