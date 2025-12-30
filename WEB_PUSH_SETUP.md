@@ -54,3 +54,5 @@ curl -X POST https://vila-app-back.vercel.app/api/push/send \
 - **Permission denied?** User needs to allow notifications in iPhone Settings
 - **iOS version?** Requires iOS 16.4+ for Web Push in PWA
 
+
+

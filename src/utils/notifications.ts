@@ -147,6 +147,21 @@ function urlBase64ToUint8Array(base64String: string): ArrayBuffer {
 }
 
 /**
+ * Convert ArrayBuffer to base64 string
+ */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return window.btoa(binary)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '')
+}
+
+/**
  * Register Web Push subscription for background notifications
  * Works on iOS 16.4+ PWA with proper Web Push API
  */
@@ -212,9 +227,18 @@ export const registerPushSubscription = async (username: string, apiBaseUrl: str
       applicationServerKey: applicationServerKey,
     })
 
-    // Convert subscription to base64 for backend
-    const subscriptionJson = JSON.stringify(subscription)
-    const token = btoa(subscriptionJson)
+    // Convert PushSubscription to the format expected by web-push
+    // The subscription object needs to be serialized properly
+    const subscriptionData = {
+      endpoint: subscription.endpoint,
+      keys: {
+        p256dh: arrayBufferToBase64(subscription.getKey('p256dh')!),
+        auth: arrayBufferToBase64(subscription.getKey('auth')!),
+      },
+    }
+
+    // Store the full subscription JSON as the token for the backend
+    const token = JSON.stringify(subscriptionData)
 
     // Register with backend
     const res = await fetch(`${apiBaseUrl}/push/register`, {
