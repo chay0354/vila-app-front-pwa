@@ -85,19 +85,22 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
       }
       setUnit(foundUnit)
 
-      const foundTask = foundUnit.tasks.find((t: MaintenanceTask) => t.id === taskId)
+      const foundTask = foundUnit.tasks.find((t: MaintenanceTask) => t.id === taskId) as MaintenanceTask | undefined
       if (!foundTask) {
         console.error('[PWA TaskDetail] Task not found:', taskId)
         navigate(`/maintenance/${unitId}/tasks`)
         return
       }
       
-      console.log('[PWA TaskDetail] Found task:', foundTask.id, 'imageUri:', foundTask.imageUri ? 'YES' : 'NO')
+      // TypeScript now knows foundTask is MaintenanceTask after the null check
+      const currentTask: MaintenanceTask = foundTask
+      
+      console.log('[PWA TaskDetail] Found task:', currentTask.id, 'imageUri:', currentTask.imageUri ? 'YES' : 'NO')
       
       // Now fetch the full task with image_uri
       if (!taskId) {
         console.error('[PWA TaskDetail] taskId is undefined')
-        setTask(foundTask)
+        setTask(currentTask)
         return
       }
       
@@ -130,24 +133,24 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
           
           // Update task with full data including imageUri
           const updatedTask: MaintenanceTask = {
-            id: foundTask.id,
-            unitId: foundTask.unitId,
-            title: fullTaskData.title || foundTask.title,
-            description: fullTaskData.description || foundTask.description,
-            status: (fullTaskData.status || foundTask.status) as MaintenanceTask['status'],
-            createdDate: fullTaskData.created_date || fullTaskData.createdDate || foundTask.createdDate,
-            assignedTo: fullTaskData.assigned_to || fullTaskData.assignedTo || foundTask.assignedTo,
+            id: currentTask.id,
+            unitId: currentTask.unitId,
+            title: fullTaskData.title || currentTask.title,
+            description: fullTaskData.description || currentTask.description,
+            status: (fullTaskData.status || currentTask.status) as MaintenanceTask['status'],
+            createdDate: fullTaskData.created_date || fullTaskData.createdDate || currentTask.createdDate,
+            assignedTo: fullTaskData.assigned_to || fullTaskData.assignedTo || currentTask.assignedTo,
             imageUri: imageUri,
           }
           console.log('[PWA TaskDetail] Setting task with imageUri:', updatedTask.imageUri ? 'YES' : 'NO')
           setTask(updatedTask)
         } else {
           console.warn('[PWA TaskDetail] Failed to fetch full task, using task without image:', fullTaskRes.status)
-          setTask(foundTask)
+          setTask(currentTask)
         }
       } catch (fetchErr) {
         console.error('[PWA TaskDetail] Error fetching full task:', fetchErr)
-        setTask(foundTask)
+        setTask(currentTask)
       }
     } catch (err) {
       console.error('Error loading maintenance units:', err)
