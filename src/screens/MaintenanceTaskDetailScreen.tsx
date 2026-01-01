@@ -95,12 +95,18 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
       console.log('[PWA TaskDetail] Found task:', foundTask.id, 'imageUri:', foundTask.imageUri ? 'YES' : 'NO')
       
       // Now fetch the full task with image_uri
+      if (!taskId) {
+        console.error('[PWA TaskDetail] taskId is undefined')
+        setTask(foundTask)
+        return
+      }
+      
       console.log('[PWA TaskDetail] Fetching full task with image_uri for:', taskId)
       try {
         const fullTaskRes = await fetch(`${API_BASE_URL}/api/maintenance/tasks/${encodeURIComponent(taskId)}`)
         if (fullTaskRes.ok) {
           const fullTaskData = await fullTaskRes.json()
-          const imageUri = fullTaskData.image_uri || fullTaskData.imageUri
+          const imageUri: string | undefined = fullTaskData.image_uri || fullTaskData.imageUri || undefined
           console.log('[PWA TaskDetail] ==========================================')
           console.log('[PWA TaskDetail] IMAGE/VIDEO URL:', imageUri || 'NONE')
           if (imageUri) {
@@ -115,7 +121,8 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
               console.log('[PWA TaskDetail] URL Type: HTTP/HTTPS (Storage URL)')
             } else if (imageUri.startsWith('data:')) {
               console.log('[PWA TaskDetail] URL Type: Data URI (Base64)')
-              const mimeType = imageUri.substring(5, imageUri.indexOf(';'))
+              const semicolonIndex = imageUri.indexOf(';')
+              const mimeType = semicolonIndex > 0 ? imageUri.substring(5, semicolonIndex) : 'unknown'
               console.log('[PWA TaskDetail] Data URI MIME type:', mimeType)
             }
           }
@@ -123,13 +130,14 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
           
           // Update task with full data including imageUri
           const updatedTask: MaintenanceTask = {
-            ...foundTask,
-            imageUri: imageUri || undefined,
+            id: foundTask.id,
+            unitId: foundTask.unitId,
             title: fullTaskData.title || foundTask.title,
             description: fullTaskData.description || foundTask.description,
             status: (fullTaskData.status || foundTask.status) as MaintenanceTask['status'],
             createdDate: fullTaskData.created_date || fullTaskData.createdDate || foundTask.createdDate,
             assignedTo: fullTaskData.assigned_to || fullTaskData.assignedTo || foundTask.assignedTo,
+            imageUri: imageUri,
           }
           console.log('[PWA TaskDetail] Setting task with imageUri:', updatedTask.imageUri ? 'YES' : 'NO')
           setTask(updatedTask)
