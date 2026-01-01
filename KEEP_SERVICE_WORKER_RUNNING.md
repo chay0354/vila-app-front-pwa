@@ -49,3 +49,6 @@ After starting the service worker:
 3. Check logs in service worker internals page
 4. Should see "🔔 PUSH EVENT RECEIVED!"
 
+
+
+

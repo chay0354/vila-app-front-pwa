@@ -40,12 +40,15 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
 
   const loadMaintenanceUnits = async () => {
     try {
+      console.log('[PWA TaskDetail] Loading maintenance units...')
       const res = await fetch(`${API_BASE_URL}/api/maintenance/tasks`)
       if (!res.ok) {
+        console.error('[PWA TaskDetail] Failed to load tasks:', res.status)
         navigate('/maintenance')
         return
       }
       const data = (await res.json()) || []
+      console.log('[PWA TaskDetail] Loaded', data.length, 'tasks (without images)')
 
       const baseUnits = getInitialMaintenanceUnits()
       const byId = new Map<string, MaintenanceUnit>()
@@ -76,6 +79,7 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
 
       const foundUnit = baseUnits.find(u => u.id === unitId)
       if (!foundUnit) {
+        console.error('[PWA TaskDetail] Unit not found:', unitId)
         navigate('/maintenance')
         return
       }
@@ -83,10 +87,60 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
 
       const foundTask = foundUnit.tasks.find((t: MaintenanceTask) => t.id === taskId)
       if (!foundTask) {
+        console.error('[PWA TaskDetail] Task not found:', taskId)
         navigate(`/maintenance/${unitId}/tasks`)
         return
       }
-      setTask(foundTask)
+      
+      console.log('[PWA TaskDetail] Found task:', foundTask.id, 'imageUri:', foundTask.imageUri ? 'YES' : 'NO')
+      
+      // Now fetch the full task with image_uri
+      console.log('[PWA TaskDetail] Fetching full task with image_uri for:', taskId)
+      try {
+        const fullTaskRes = await fetch(`${API_BASE_URL}/api/maintenance/tasks/${encodeURIComponent(taskId)}`)
+        if (fullTaskRes.ok) {
+          const fullTaskData = await fullTaskRes.json()
+          const imageUri = fullTaskData.image_uri || fullTaskData.imageUri
+          console.log('[PWA TaskDetail] ==========================================')
+          console.log('[PWA TaskDetail] IMAGE/VIDEO URL:', imageUri || 'NONE')
+          if (imageUri) {
+            console.log('[PWA TaskDetail] URL length:', imageUri.length)
+            const isVideo = imageUri.startsWith('data:video/') || 
+                           imageUri.includes('.mp4') || 
+                           imageUri.includes('.mov') || 
+                           imageUri.includes('/vidoes/') || 
+                           imageUri.includes('/storage/')
+            console.log('[PWA TaskDetail] Type:', isVideo ? 'VIDEO' : 'IMAGE')
+            if (imageUri.startsWith('http')) {
+              console.log('[PWA TaskDetail] URL Type: HTTP/HTTPS (Storage URL)')
+            } else if (imageUri.startsWith('data:')) {
+              console.log('[PWA TaskDetail] URL Type: Data URI (Base64)')
+              const mimeType = imageUri.substring(5, imageUri.indexOf(';'))
+              console.log('[PWA TaskDetail] Data URI MIME type:', mimeType)
+            }
+          }
+          console.log('[PWA TaskDetail] ==========================================')
+          
+          // Update task with full data including imageUri
+          const updatedTask: MaintenanceTask = {
+            ...foundTask,
+            imageUri: imageUri || undefined,
+            title: fullTaskData.title || foundTask.title,
+            description: fullTaskData.description || foundTask.description,
+            status: (fullTaskData.status || foundTask.status) as MaintenanceTask['status'],
+            createdDate: fullTaskData.created_date || fullTaskData.createdDate || foundTask.createdDate,
+            assignedTo: fullTaskData.assigned_to || fullTaskData.assignedTo || foundTask.assignedTo,
+          }
+          console.log('[PWA TaskDetail] Setting task with imageUri:', updatedTask.imageUri ? 'YES' : 'NO')
+          setTask(updatedTask)
+        } else {
+          console.warn('[PWA TaskDetail] Failed to fetch full task, using task without image:', fullTaskRes.status)
+          setTask(foundTask)
+        }
+      } catch (fetchErr) {
+        console.error('[PWA TaskDetail] Error fetching full task:', fetchErr)
+        setTask(foundTask)
+      }
     } catch (err) {
       console.error('Error loading maintenance units:', err)
       navigate('/maintenance')
@@ -301,8 +355,13 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
             <p className="maintenance-task-detail-description">{task.description}</p>
           </div>
 
-          {task.imageUri && (
+          {task.imageUri ? (
             <div className="maintenance-task-detail-section maintenance-task-detail-section-with-media">
+              {(() => {
+                console.log('[PWA TaskDetail] Rendering image/video with URL:', task.imageUri)
+                console.log('[PWA TaskDetail] Rendering as:', isVideo ? 'VIDEO' : 'IMAGE')
+                return null
+              })()}
               <div className="maintenance-task-detail-media-header-overlay">
                 <span className="maintenance-task-detail-label-overlay">{isVideo ? 'וידאו:' : 'תמונה:'}</span>
                 <button
@@ -318,11 +377,33 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
               </div>
               <div className="maintenance-task-detail-image-container">
                 {isVideo ? (
-                  <video src={task.imageUri} controls className="maintenance-task-detail-image" />
+                  <video 
+                    src={task.imageUri} 
+                    controls 
+                    className="maintenance-task-detail-image"
+                    onLoadStart={() => console.log('[PWA TaskDetail] Video loading started:', task.imageUri)}
+                    onLoadedData={() => console.log('[PWA TaskDetail] Video loaded successfully:', task.imageUri)}
+                    onError={(e) => console.error('[PWA TaskDetail] Video error:', e, 'URL:', task.imageUri)}
+                  />
                 ) : (
-                  <img src={task.imageUri} alt="Task media" className="maintenance-task-detail-image" />
+                  <img 
+                    src={task.imageUri} 
+                    alt="Task media" 
+                    className="maintenance-task-detail-image"
+                    onLoad={() => console.log('[PWA TaskDetail] Image loaded successfully:', task.imageUri)}
+                    onError={(e) => console.error('[PWA TaskDetail] Image error:', e, 'URL:', task.imageUri)}
+                  />
                 )}
               </div>
+            </div>
+          ) : (
+            <div className="maintenance-task-detail-section">
+              <p style={{ color: '#999', fontStyle: 'italic' }}>
+                {(() => {
+                  console.log('[PWA TaskDetail] No imageUri available for task:', task.id)
+                  return 'אין תמונה או וידאו'
+                })()}
+              </p>
             </div>
           )}
 

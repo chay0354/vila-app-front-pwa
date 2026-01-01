@@ -38,3 +38,6 @@ Write-Host "IMPORTANT: The service worker IS working!" -ForegroundColor Green
 Write-Host "The push notification system is functional." -ForegroundColor Green
 Write-Host "On iOS PWA (when added to home screen), notifications will work the same way." -ForegroundColor Cyan
 
+
+
+

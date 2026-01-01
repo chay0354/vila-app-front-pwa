@@ -76,3 +76,6 @@ You'll know it's working when:
    - Windows: Click notification icon (bottom right)
    - Sometimes notifications appear there even if not as a popup
 
+
+
+

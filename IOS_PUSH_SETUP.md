@@ -159,3 +159,6 @@ The subscription sent to backend:
 5. **Works offline** - Service worker can receive push even when device is offline (queued)
 
 
+
+
+

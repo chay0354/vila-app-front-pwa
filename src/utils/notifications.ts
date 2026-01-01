@@ -169,8 +169,11 @@ export const registerPushSubscription = async (username: string, apiBaseUrl: str
   if (typeof window === 'undefined') return
 
   // Check if Web Push is supported (iOS 16.4+)
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-    console.warn('Web Push not supported in this browser')
+  if (!('serviceWorker' in navigator)) {
+    console.error('❌ Service Worker not supported - Web Push requires service workers')
+    console.error('   This usually means:')
+    console.error('   - Not using HTTPS')
+    console.error('   - Browser doesn\'t support service workers')
     // Fallback: register device token
     try {
       const deviceId = `web-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -183,6 +186,32 @@ export const registerPushSubscription = async (username: string, apiBaseUrl: str
           platform: 'web',
         }),
       })
+      console.warn('⚠️ Registered fallback token (Web Push not available)')
+    } catch (error) {
+      console.warn('Error registering fallback token:', error)
+    }
+    return
+  }
+
+  if (!('PushManager' in window)) {
+    console.error('❌ PushManager not supported - Web Push API not available')
+    console.error('   This usually means:')
+    console.error('   - iOS version < 16.4 (Web Push requires iOS 16.4+)')
+    console.error('   - PWA not added to home screen (required for iOS)')
+    console.error('   - Using Chrome/Firefox on iOS (must use Safari)')
+    // Fallback: register device token
+    try {
+      const deviceId = `web-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      await fetch(`${apiBaseUrl}/push/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username,
+          token: deviceId,
+          platform: 'web',
+        }),
+      })
+      console.warn('⚠️ Registered fallback token (Web Push not available)')
     } catch (error) {
       console.warn('Error registering fallback token:', error)
     }
@@ -191,7 +220,10 @@ export const registerPushSubscription = async (username: string, apiBaseUrl: str
 
   // Check notification permission
   if (Notification.permission !== 'granted') {
-    console.warn('Notification permission not granted')
+    console.error('❌ Notification permission not granted')
+    console.error('   Current permission:', Notification.permission)
+    console.error('   User must grant notification permission for Web Push to work')
+    console.error('   On iOS: Settings → [Your App] → Notifications → Allow Notifications')
     return
   }
 
@@ -200,7 +232,8 @@ export const registerPushSubscription = async (username: string, apiBaseUrl: str
     const vapidPublicKey = await getVapidPublicKey(apiBaseUrl)
     
     if (!vapidPublicKey) {
-      console.warn('VAPID public key not available, using fallback')
+      console.error('❌ VAPID public key not available from backend')
+      console.error('   Backend must have VAPID_PUBLIC_KEY configured')
       // Fallback to device token
       const deviceId = `web-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       await fetch(`${apiBaseUrl}/push/register`, {
@@ -212,20 +245,44 @@ export const registerPushSubscription = async (username: string, apiBaseUrl: str
           platform: 'web',
         }),
       })
+      console.warn('⚠️ Registered fallback token (VAPID key not available)')
       return
     }
 
+    console.log('✅ VAPID key received, registering service worker...')
+    
     // Get service worker registration
-    const registration = await navigator.serviceWorker.ready
+    let registration
+    try {
+      registration = await navigator.serviceWorker.ready
+      console.log('✅ Service worker ready')
+    } catch (error: any) {
+      console.error('❌ Service worker not ready:', error.message)
+      console.error('   Make sure service worker is registered and active')
+      throw error
+    }
 
     // Convert VAPID key to Uint8Array
     const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey)
+    console.log('✅ VAPID key converted, subscribing to push...')
 
     // Subscribe to push notifications with VAPID key
-    const subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: applicationServerKey,
-    })
+    let subscription
+    try {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: applicationServerKey,
+      })
+      console.log('✅ Web Push subscription created successfully!')
+      console.log('   Endpoint:', subscription.endpoint.substring(0, 50) + '...')
+    } catch (error: any) {
+      console.error('❌ Failed to create Web Push subscription:', error.message)
+      console.error('   Common causes:')
+      console.error('   - PWA not added to home screen (iOS requirement)')
+      console.error('   - Notification permission denied')
+      console.error('   - Service worker not active')
+      throw error
+    }
 
     // Convert PushSubscription to the format expected by web-push
     // The subscription object needs to be serialized properly
@@ -257,8 +314,12 @@ export const registerPushSubscription = async (username: string, apiBaseUrl: str
       console.warn('Failed to register Web Push subscription:', res.status)
     }
   } catch (error: any) {
-    console.warn('Error creating Web Push subscription:', error)
+    console.error('❌ Error creating Web Push subscription:', error.message)
+    console.error('   Full error:', error)
+    console.error('   Stack:', error.stack)
+    
     // Fallback: register device token
+    console.warn('⚠️ Falling back to device token (Web Push subscription failed)')
     try {
       const deviceId = `web-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       await fetch(`${apiBaseUrl}/push/register`, {
@@ -270,8 +331,15 @@ export const registerPushSubscription = async (username: string, apiBaseUrl: str
           platform: 'web',
         }),
       })
+      console.warn('⚠️ Registered fallback token - push notifications will NOT work')
+      console.warn('   To fix: Check the errors above and ensure:')
+      console.warn('   1. iOS 16.4+')
+      console.warn('   2. PWA added to home screen')
+      console.warn('   3. Notification permission granted')
+      console.warn('   4. Service worker registered')
+      console.warn('   5. VAPID keys configured in backend')
     } catch (fallbackError) {
-      console.warn('Error registering fallback token:', fallbackError)
+      console.error('❌ Error registering fallback token:', fallbackError)
     }
   }
 }
