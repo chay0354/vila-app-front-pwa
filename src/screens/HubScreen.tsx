@@ -1,20 +1,7 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { API_BASE_URL } from '../apiConfig'
 import './HubScreen.css'
-
-type Order = {
-  id: string
-  totalAmount: number
-  paidAmount: number
-  status: string
-}
-
-type Invoice = {
-  id: string
-  total_price?: number | null
-  extracted_data?: any
-}
 
 type HubScreenProps = {
   userName: string
@@ -33,64 +20,12 @@ function HubScreen({ userName, userRole, userImageUrl, onSignOut }: HubScreenPro
   const canSeeEverything = isManager(userRole);
   
   const navigate = useNavigate()
-  const [orders, setOrders] = useState<Order[]>([])
-  const [invoices, setInvoices] = useState<Invoice[]>([])
   const [openMaintenanceTasksCount, setOpenMaintenanceTasksCount] = useState<number>(0)
 
   useEffect(() => {
-    loadOrders()
-    loadInvoices()
     loadMaintenanceTasksCount()
   }, [])
 
-  const loadOrders = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/orders`)
-      if (!res.ok) {
-        console.error('Failed to load orders:', res.status)
-        return
-      }
-      const data = await res.json()
-      const list = (data || []).map((o: any): Order => ({
-        id: o.id,
-        totalAmount: Number(o.total_amount ?? o.totalAmount ?? 0),
-        paidAmount: Number(o.paid_amount ?? o.paidAmount ?? 0),
-        status: o.status ?? 'חדש',
-      }))
-      setOrders(list)
-    } catch (err) {
-      console.error('Error loading orders:', err)
-    }
-  }
-
-  const loadInvoices = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/invoices`)
-      if (!res.ok) {
-        console.error('Failed to load invoices:', res.status)
-        return
-      }
-      const data = await res.json()
-      // Parse extracted_data if it's a string
-      const parsedInvoices = (data || []).map((inv: any) => {
-        let extractedData = inv.extracted_data
-        if (typeof extractedData === 'string') {
-          try {
-            extractedData = JSON.parse(extractedData)
-          } catch {
-            extractedData = null
-          }
-        }
-        return {
-          ...inv,
-          extracted_data: extractedData,
-        }
-      })
-      setInvoices(parsedInvoices)
-    } catch (err) {
-      console.error('Error loading invoices:', err)
-    }
-  }
 
   const loadMaintenanceTasksCount = async () => {
     try {
