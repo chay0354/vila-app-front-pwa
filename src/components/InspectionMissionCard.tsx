@@ -38,7 +38,7 @@ function InspectionMissionCard({
       return '#ef4444'
     }
     if (statusText === 'זמן הביקורות טרם הגיע') {
-      return '#64748b'
+      return '#ef4444'
     }
     // fallback
     if (statusText) {
@@ -98,7 +98,9 @@ function InspectionMissionCard({
           </div>
 
           <div className="inspection-mission-tasks-list">
-            {(isCleaningInspection ? categorizeCleaningTasks(mission.tasks) : categorizeTasks(mission.tasks)).map(category => (
+            {(isCleaningInspection ? categorizeCleaningTasks(mission.tasks) : categorizeTasks(mission.tasks))
+              .filter(category => category.name !== 'מסדרון')
+              .map(category => (
               <div key={category.name} className="inspection-mission-task-category">
                 <h5 className="inspection-mission-task-category-title">{category.name}</h5>
                 {category.tasks.map(task => (
@@ -138,7 +140,7 @@ function InspectionMissionCard({
                 onSave(mission.id)
               }}
             >
-              שמור
+              ביקורת נקיון מאושרת
             </button>
           </div>
         </>

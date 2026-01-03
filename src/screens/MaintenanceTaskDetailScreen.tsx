@@ -131,7 +131,7 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
           }
           console.log('[PWA TaskDetail] ==========================================')
           
-          // Update task with full data including imageUri
+          // Update task with full data including imageUri and closingImageUri
           const updatedTask: MaintenanceTask = {
             id: currentTask.id,
             unitId: currentTask.unitId,
@@ -141,6 +141,7 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
             createdDate: fullTaskData.created_date || fullTaskData.createdDate || currentTask.createdDate,
             assignedTo: fullTaskData.assigned_to || fullTaskData.assignedTo || currentTask.assignedTo,
             imageUri: imageUri,
+            closingImageUri: fullTaskData.closing_image_uri || fullTaskData.closingImageUri || undefined,
           }
           console.log('[PWA TaskDetail] Setting task with imageUri:', updatedTask.imageUri ? 'YES' : 'NO')
           setTask(updatedTask)
@@ -366,25 +367,23 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
             <p className="maintenance-task-detail-description">{task.description}</p>
           </div>
 
+          {/* Opening Media (imageUri) - show for all tasks */}
           {task.imageUri ? (
             <div className="maintenance-task-detail-section maintenance-task-detail-section-with-media">
-              {(() => {
-                console.log('[PWA TaskDetail] Rendering image/video with URL:', task.imageUri)
-                console.log('[PWA TaskDetail] Rendering as:', isVideo ? 'VIDEO' : 'IMAGE')
-                return null
-              })()}
               <div className="maintenance-task-detail-media-header-overlay">
-                <span className="maintenance-task-detail-label-overlay">{isVideo ? 'וידאו:' : 'תמונה:'}</span>
-                <button
-                  className="maintenance-task-detail-edit-media-button"
-                  onClick={() => {
-                    setEditMediaUri(task.imageUri)
-                    setShowEditMediaModal(true)
-                  }}
-                  type="button"
-                >
-                  ערוך/העלה
-                </button>
+                <span className="maintenance-task-detail-label-overlay">{isVideo ? 'וידאו פתיחה:' : 'תמונה פתיחה:'}</span>
+                {task.status !== 'סגור' && (
+                  <button
+                    className="maintenance-task-detail-edit-media-button"
+                    onClick={() => {
+                      setEditMediaUri(task.imageUri)
+                      setShowEditMediaModal(true)
+                    }}
+                    type="button"
+                  >
+                    ערוך/העלה
+                  </button>
+                )}
               </div>
               <div className="maintenance-task-detail-image-container">
                 {isVideo ? (
@@ -392,17 +391,17 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
                     src={task.imageUri} 
                     controls 
                     className="maintenance-task-detail-image"
-                    onLoadStart={() => console.log('[PWA TaskDetail] Video loading started:', task.imageUri)}
-                    onLoadedData={() => console.log('[PWA TaskDetail] Video loaded successfully:', task.imageUri)}
-                    onError={(e) => console.error('[PWA TaskDetail] Video error:', e, 'URL:', task.imageUri)}
+                    onLoadStart={() => console.log('[PWA TaskDetail] Opening video loading started:', task.imageUri)}
+                    onLoadedData={() => console.log('[PWA TaskDetail] Opening video loaded successfully:', task.imageUri)}
+                    onError={(e) => console.error('[PWA TaskDetail] Opening video error:', e, 'URL:', task.imageUri)}
                   />
                 ) : (
                   <img 
                     src={task.imageUri} 
-                    alt="Task media" 
+                    alt="Opening media" 
                     className="maintenance-task-detail-image"
-                    onLoad={() => console.log('[PWA TaskDetail] Image loaded successfully:', task.imageUri)}
-                    onError={(e) => console.error('[PWA TaskDetail] Image error:', e, 'URL:', task.imageUri)}
+                    onLoad={() => console.log('[PWA TaskDetail] Opening image loaded successfully:', task.imageUri)}
+                    onError={(e) => console.error('[PWA TaskDetail] Opening image error:', e, 'URL:', task.imageUri)}
                   />
                 )}
               </div>
@@ -412,9 +411,38 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
               <p style={{ color: '#999', fontStyle: 'italic' }}>
                 {(() => {
                   console.log('[PWA TaskDetail] No imageUri available for task:', task.id)
-                  return 'אין תמונה או וידאו'
+                  return 'אין תמונה או וידאו פתיחה'
                 })()}
               </p>
+            </div>
+          )}
+
+          {/* Closing Media (closingImageUri) - show only for closed tasks */}
+          {task.status === 'סגור' && task.closingImageUri && (
+            <div className="maintenance-task-detail-section maintenance-task-detail-section-with-media">
+              <div className="maintenance-task-detail-media-header-overlay">
+                <span className="maintenance-task-detail-label-overlay">{closingIsVideo ? 'וידאו סגירה:' : 'תמונה סגירה:'}</span>
+              </div>
+              <div className="maintenance-task-detail-image-container">
+                {closingIsVideo ? (
+                  <video 
+                    src={task.closingImageUri} 
+                    controls 
+                    className="maintenance-task-detail-image"
+                    onLoadStart={() => console.log('[PWA TaskDetail] Closing video loading started:', task.closingImageUri)}
+                    onLoadedData={() => console.log('[PWA TaskDetail] Closing video loaded successfully:', task.closingImageUri)}
+                    onError={(e) => console.error('[PWA TaskDetail] Closing video error:', e, 'URL:', task.closingImageUri)}
+                  />
+                ) : (
+                  <img 
+                    src={task.closingImageUri} 
+                    alt="Closing media" 
+                    className="maintenance-task-detail-image"
+                    onLoad={() => console.log('[PWA TaskDetail] Closing image loaded successfully:', task.closingImageUri)}
+                    onError={(e) => console.error('[PWA TaskDetail] Closing image error:', e, 'URL:', task.closingImageUri)}
+                  />
+                )}
+              </div>
             </div>
           )}
 

@@ -11,60 +11,123 @@ type ProductEntry = {
   quantity: string
 }
 
+type ProductCategory = {
+  name: string
+  products: string[]
+}
+
+const PRODUCT_CATEGORIES: ProductCategory[] = [
+  {
+    name: 'חומרי ניקוי / מטבח',
+    products: [
+      'סקוץ\' כרית כפולה',
+      'סקוץ\' חד־צדדי',
+      'סקוץ\' מיקרופייבר ריבוע',
+      'מטאטא',
+      'יעה ואשפתון',
+      'מגב',
+      'פרמידה סולימרית',
+      'נייר זכוכית K300',
+      'שקיות זבל גדול',
+      'שקיות זבל מיני–שחורים',
+      'נייר טואלט',
+      'שמן לשטיפה',
+      'סבון גוף משאבה',
+      'קפה שחור והלוגן קפסולות',
+      'ספל קפה',
+      'סבון ידיים',
+      'כלור נוזלי',
+      'נוזל רצפות',
+      'סבון כלים',
+      'שפריצר חלונות',
+      'שפריצר אבנית (אנטי־קאלק)',
+      'מסיר שומנים',
+      'מבשם ריח נעים',
+      'מגב כיור קטן',
+    ],
+  },
+  {
+    name: 'מוצרים טכניים',
+    products: [
+      'שלט TV',
+      'שלט טלוויזיה',
+      'שלט מזגן',
+      'בטריות קטנות',
+      'בטריות גדולות',
+      'מטקות',
+      'כדורי פינגפונג',
+      'כלור לבריכה',
+      'רשת לבריכה',
+      'מציל',
+      'מקל ספיר',
+      'ראש סוכר ניקול',
+      'צבתות ענקיות',
+      'צבתות סיליקון',
+      'צבתות מרק',
+      'כוסות שתייה קלה',
+      'כוסות שתייה חמה',
+      'כוסות שתייה יין',
+      'סכין',
+      'מזלג',
+      'כפית',
+      'כפות',
+      'סכין חד גדול',
+    ],
+  },
+]
+
 type NewWarehouseOrderScreenProps = {
   userName: string
 }
 
 function NewWarehouseOrderScreen({}: NewWarehouseOrderScreenProps) {
   const navigate = useNavigate()
-  const [products, setProducts] = useState<ProductEntry[]>([
-    { id: Date.now().toString(), name: '', quantity: '' }
-  ])
+  const [selectedProducts, setSelectedProducts] = useState<Map<string, number>>(new Map())
   const [selectedHotel, setSelectedHotel] = useState<string>('')
   const [saving, setSaving] = useState(false)
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null)
 
-  const handleAddProduct = () => {
-    setProducts([...products, { id: Date.now().toString(), name: '', quantity: '' }])
+  const handleProductToggle = (productName: string) => {
+    const newSelected = new Map(selectedProducts)
+    if (newSelected.has(productName)) {
+      newSelected.delete(productName)
+    } else {
+      newSelected.set(productName, 1)
+    }
+    setSelectedProducts(newSelected)
   }
 
-  const handleRemoveProduct = (id: string) => {
-    if (products.length > 1) {
-      setProducts(products.filter(p => p.id !== id))
+  const handleQuantityChange = (productName: string, quantity: number) => {
+    if (quantity <= 0) {
+      const newSelected = new Map(selectedProducts)
+      newSelected.delete(productName)
+      setSelectedProducts(newSelected)
+    } else {
+      const newSelected = new Map(selectedProducts)
+      newSelected.set(productName, quantity)
+      setSelectedProducts(newSelected)
     }
   }
 
-  const handleProductChange = (id: string, field: 'name' | 'quantity', value: string) => {
-    setProducts(products.map(p =>
-      p.id === id ? { ...p, [field]: value } : p
-    ))
+  const toggleCategory = (categoryName: string) => {
+    setExpandedCategory(expandedCategory === categoryName ? null : categoryName)
   }
 
   const handleSave = async () => {
-    const validProducts = products.filter(p => p.name.trim() && p.quantity.trim())
-
-    if (validProducts.length === 0) {
-      alert('יש להוסיף לפחות פריט אחד עם שם וכמות')
+    if (selectedProducts.size === 0) {
+      alert('יש לבחור לפחות פריט אחד')
       return
-    }
-
-    for (const product of validProducts) {
-      const quantity = parseFloat(product.quantity)
-      if (isNaN(quantity) || quantity <= 0) {
-        alert(`הכמות של "${product.name}" אינה תקינה`)
-        return
-      }
     }
 
     setSaving(true)
     try {
       const orderDate = new Date().toISOString().split('T')[0]
 
-      const orderItems: InventoryOrderItem[] = validProducts.map(product => {
-        const quantity = parseFloat(product.quantity)
+      const orderItems: InventoryOrderItem[] = Array.from(selectedProducts.entries()).map(([productName, quantity]) => {
         return {
           id: '',
           itemId: '',
-          itemName: product.name.trim(),
+          itemName: productName,
           quantity: quantity,
           unit: '',
         }
@@ -108,7 +171,7 @@ function NewWarehouseOrderScreen({}: NewWarehouseOrderScreenProps) {
       }
 
       setSaving(false)
-      alert(`ההזמנה נוצרה בהצלחה עם ${validProducts.length} פריטים`)
+      alert(`ההזמנה נוצרה בהצלחה עם ${selectedProducts.size} פריטים`)
       navigate('/warehouse/orders')
     } catch (err: any) {
       setSaving(false)
@@ -147,47 +210,112 @@ function NewWarehouseOrderScreen({}: NewWarehouseOrderScreenProps) {
           </select>
         </div>
 
-        <div className="new-warehouse-order-products-list">
-          {products.map((product) => (
-            <div key={product.id} className="new-warehouse-order-product-item">
-              <div className="new-warehouse-order-product-info">
-                <input
-                  type="text"
-                  className="new-warehouse-order-product-name-input"
-                  value={product.name}
-                  onChange={(e) => handleProductChange(product.id, 'name', e.target.value)}
-                  placeholder="שם המוצר"
-                  dir="rtl"
-                />
-              </div>
-              <div className="new-warehouse-order-product-controls">
-                <input
-                  type="number"
-                  className="new-warehouse-order-quantity-input"
-                  value={product.quantity}
-                  onChange={(e) => handleProductChange(product.id, 'quantity', e.target.value)}
-                  placeholder="כמות"
-                  dir="rtl"
-                />
-                {products.length > 1 && (
-                  <button
-                    onClick={() => handleRemoveProduct(product.id)}
-                    className="new-warehouse-order-remove-product-button"
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
+        {/* Product Categories */}
+        <div className="new-warehouse-order-categories">
+          {PRODUCT_CATEGORIES.map((category) => (
+            <div key={category.name} className="new-warehouse-order-category">
+              <button
+                className="new-warehouse-order-category-header"
+                onClick={() => toggleCategory(category.name)}
+              >
+                <span className="new-warehouse-order-category-name">{category.name}</span>
+                <span className="new-warehouse-order-category-toggle">
+                  {expandedCategory === category.name ? '▼' : '▶'}
+                </span>
+              </button>
+              {expandedCategory === category.name && (
+                <div className="new-warehouse-order-products-grid">
+                  {category.products.map((product) => (
+                    <div
+                      key={product}
+                      className={`new-warehouse-order-product-option ${
+                        selectedProducts.has(product) ? 'selected' : ''
+                      }`}
+                      onClick={() => handleProductToggle(product)}
+                    >
+                      <span className="new-warehouse-order-product-option-name">{product}</span>
+                      {selectedProducts.has(product) && (
+                        <div
+                          className="new-warehouse-order-product-option-quantity"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            className="new-warehouse-order-quantity-btn"
+                            onClick={() =>
+                              handleQuantityChange(
+                                product,
+                                (selectedProducts.get(product) || 1) - 1
+                              )
+                            }
+                          >
+                            −
+                          </button>
+                          <input
+                            type="number"
+                            className="new-warehouse-order-quantity-input-small"
+                            value={selectedProducts.get(product) || 1}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value) || 1
+                              handleQuantityChange(product, val)
+                            }}
+                            min="1"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <button
+                            className="new-warehouse-order-quantity-btn"
+                            onClick={() =>
+                              handleQuantityChange(
+                                product,
+                                (selectedProducts.get(product) || 1) + 1
+                              )
+                            }
+                          >
+                            +
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
 
-        <button
-          onClick={handleAddProduct}
-          className="new-warehouse-order-add-product-button"
-        >
-          + הוסף פריט
-        </button>
+        {/* Selected Products Summary */}
+        {selectedProducts.size > 0 && (
+          <div className="new-warehouse-order-selected-summary">
+            <h3 className="new-warehouse-order-selected-title">פריטים שנבחרו ({selectedProducts.size})</h3>
+            <div className="new-warehouse-order-selected-list">
+              {Array.from(selectedProducts.entries()).map(([productName, quantity]) => (
+                <div key={productName} className="new-warehouse-order-selected-item">
+                  <span className="new-warehouse-order-selected-item-name">{productName}</span>
+                  <div className="new-warehouse-order-selected-item-controls">
+                    <button
+                      className="new-warehouse-order-quantity-btn"
+                      onClick={() => handleQuantityChange(productName, quantity - 1)}
+                    >
+                      −
+                    </button>
+                    <span className="new-warehouse-order-selected-quantity">{quantity}</span>
+                    <button
+                      className="new-warehouse-order-quantity-btn"
+                      onClick={() => handleQuantityChange(productName, quantity + 1)}
+                    >
+                      +
+                    </button>
+                    <button
+                      className="new-warehouse-order-remove-selected-btn"
+                      onClick={() => handleProductToggle(productName)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="new-warehouse-order-actions">
           <button

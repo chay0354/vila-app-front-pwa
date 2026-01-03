@@ -9,6 +9,8 @@ export type MaintenanceTask = {
   createdDate: string
   assignedTo?: string
   imageUri?: string
+  closingImageUri?: string
+  room?: string
 }
 
 export type MaintenanceUnit = {

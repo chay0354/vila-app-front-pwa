@@ -8,7 +8,7 @@ type OrderEditScreenProps = {
   userName: string
 }
 
-function OrderEditScreen({}: OrderEditScreenProps) {
+function OrderEditScreen({ userName }: OrderEditScreenProps) {
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
   const [order, setOrder] = useState<Order | null>(null)
@@ -84,6 +84,8 @@ function OrderEditScreen({}: OrderEditScreenProps) {
             paidAmount: Number(o.paid_amount ?? o.paidAmount ?? 0),
             totalAmount: Number(o.total_amount ?? o.totalAmount ?? 0),
             paymentMethod: o.payment_method ?? o.paymentMethod ?? 'לא צוין',
+            createdBy: o.created_by ?? o.createdBy ?? undefined,
+            openedBy: o.opened_by ?? o.openedBy ?? undefined,
           }))
           const foundOrder = list.find((o: Order) => o.id === orderId)
           if (foundOrder) {
@@ -199,6 +201,7 @@ function OrderEditScreen({}: OrderEditScreenProps) {
         guests_count: Number(guestsCount) || 0,
         special_requests: specialRequests.trim(),
         internal_notes: internalNotes.trim(),
+        opened_by: userName || undefined,
       }
 
       // For new orders, use POST. For existing orders, use PATCH
@@ -275,10 +278,21 @@ function OrderEditScreen({}: OrderEditScreenProps) {
   return (
     <div className="order-edit-container">
       <div className="order-edit-scroll">
-        <h1 className="order-edit-title">עריכת הזמנה</h1>
-        <p className="order-edit-subtitle">
-          שינוי מלא של פרטי הזמנה והוספת תשלום נוסף
-        </p>
+        <div style={{ display: 'flex', flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <div>
+            <h1 className="order-edit-title">עריכת הזמנה</h1>
+            <p className="order-edit-subtitle">
+              שינוי מלא של פרטי הזמנה והוספת תשלום נוסף
+            </p>
+          </div>
+          <button
+            className="order-edit-back-button"
+            onClick={() => navigate('/orders')}
+            type="button"
+          >
+            ← חזרה
+          </button>
+        </div>
 
         <div className="order-edit-card">
           <label className="order-edit-label">שם אורח</label>
@@ -512,17 +526,6 @@ function OrderEditScreen({}: OrderEditScreenProps) {
                 </div>
               </div>
 
-              <div className="order-edit-field-row">
-                <div className="order-edit-field-half">
-                  <button
-                    className="order-edit-add-payment-trigger"
-                    onClick={() => setShowAddPayment(true)}
-                    type="button"
-                  >
-                    הוסף / עדכון תשלום
-                  </button>
-                </div>
-              </div>
             </>
           )}
 

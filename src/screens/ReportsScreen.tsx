@@ -7,6 +7,13 @@ import { InventoryOrder, Warehouse, WarehouseItem } from '../types/warehouse'
 import { MaintenanceUnit } from '../types/maintenance'
 import { computeInspectionStatus } from '../utils/inspectionUtils'
 import { getInitialMaintenanceUnits, normalizeMaintenanceUnitId } from '../utils/maintenanceUtils'
+import {
+  exportOrdersReport,
+  exportInspectionsReport,
+  exportWarehouseReport,
+  exportMaintenanceReport,
+  exportAttendanceReport,
+} from '../utils/excelExport'
 import OptionCard from '../components/OptionCard'
 import './ReportsScreen.css'
 
@@ -840,17 +847,42 @@ function ReportsScreen({}: ReportsScreenProps) {
           <div className="reports-detail-card">
             <div className="reports-detail-header">
               <h2 className="reports-detail-title">{reportTitle}</h2>
-              <button
-                className="reports-open-screen-button"
-                onClick={() => {
-                  if (activeReport === 'orders') navigate('/orders')
-                  else if (activeReport === 'inspections') navigate('/exit-inspections')
-                  else if (activeReport === 'warehouse') navigate('/warehouse')
-                  else if (activeReport === 'maintenance') navigate('/maintenance')
-                }}
-              >
-                פתח מסך
-              </button>
+              <div style={{ display: 'flex', flexDirection: 'row-reverse', gap: '8px' }}>
+                <button
+                  className="reports-export-button"
+                  onClick={() => {
+                    if (activeReport === 'orders') {
+                      exportOrdersReport(ordersByUnitReport, orders, formatMoney)
+                    } else if (activeReport === 'inspections') {
+                      exportInspectionsReport(inspectionsByUnit, missions)
+                    } else if (activeReport === 'warehouse') {
+                      exportWarehouseReport(warehouseInventoryByWarehouse, inventoryOrders)
+                    } else if (activeReport === 'maintenance') {
+                      exportMaintenanceReport(
+                        maintenanceTasksByUnit,
+                        maintenanceTasksEffective,
+                        resolveAssignee,
+                        normalizeMaintenanceStatus,
+                      )
+                    } else if (activeReport === 'attendance') {
+                      exportAttendanceReport(attendancePeriodsByEmployee, attendanceLogs, normalizeClock)
+                    }
+                  }}
+                >
+                  📥 ייצא ל-Excel
+                </button>
+                <button
+                  className="reports-open-screen-button"
+                  onClick={() => {
+                    if (activeReport === 'orders') navigate('/orders')
+                    else if (activeReport === 'inspections') navigate('/exit-inspections')
+                    else if (activeReport === 'warehouse') navigate('/warehouse')
+                    else if (activeReport === 'maintenance') navigate('/maintenance')
+                  }}
+                >
+                  פתח מסך
+                </button>
+              </div>
             </div>
 
             {/* Orders Report Detail */}

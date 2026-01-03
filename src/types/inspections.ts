@@ -90,6 +90,15 @@ export const defaultCleaningInspectionTasks: InspectionTask[] = [
   { id: '29', name: 'שטיפה לרצפה בחוץ', completed: false },
   { id: '30', name: 'לרוקן את הפחים, לשים שקית חדשה', completed: false },
   { id: '31', name: 'להעביר סמרטוט על הפחים ולשים שקיות', completed: false },
+  // חדרים (Rooms)
+  { id: '32', name: 'חדר 1', completed: false },
+  { id: '33', name: 'חדר 2', completed: false },
+  { id: '34', name: 'חדר 3', completed: false },
+  { id: '35', name: 'חדר 4', completed: false },
+  { id: '36', name: 'חדר 5', completed: false },
+  { id: '37', name: 'חדר 6', completed: false },
+  { id: '38', name: 'חדר 7', completed: false },
+  { id: '39', name: 'חדר 8', completed: false },
 ]
 
 // Default tasks for monthly inspections

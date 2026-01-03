@@ -18,6 +18,7 @@ function NewMaintenanceTaskScreen({ userName }: NewMaintenanceTaskScreenProps) {
   const [description, setDescription] = useState('')
   const [assignedTo, setAssignedTo] = useState<string>('')
   const [showAssigneeModal, setShowAssigneeModal] = useState(false)
+  const [room, setRoom] = useState('')
   const [mediaUri, setMediaUri] = useState<string | undefined>(undefined)
 
   useEffect(() => {
@@ -161,6 +162,7 @@ function NewMaintenanceTaskScreen({ userName }: NewMaintenanceTaskScreenProps) {
         created_date: new Date().toISOString().split('T')[0],
       }
       if (assignedTo) jsonPayload.assigned_to = assignedTo
+      if (room) jsonPayload.room = room
       if (mediaUri) jsonPayload.imageUri = mediaUri
 
       const jsonRes = await fetch(`${API_BASE_URL}/api/maintenance/tasks`, {
@@ -280,6 +282,17 @@ function NewMaintenanceTaskScreen({ userName }: NewMaintenanceTaskScreenProps) {
                 ))}
               </div>
             )}
+          </div>
+
+          <div className="new-maintenance-task-field">
+            <label className="new-maintenance-task-label">חדר</label>
+            <input
+              className="new-maintenance-task-input"
+              type="text"
+              value={room}
+              onChange={(e) => setRoom(e.target.value)}
+              placeholder="הזינו מספר חדר (אופציונלי)"
+            />
           </div>
 
           <div className="new-maintenance-task-field">

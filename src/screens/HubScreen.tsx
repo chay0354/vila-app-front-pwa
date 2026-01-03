@@ -35,10 +35,12 @@ function HubScreen({ userName, userRole, userImageUrl, onSignOut }: HubScreenPro
   const navigate = useNavigate()
   const [orders, setOrders] = useState<Order[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [openMaintenanceTasksCount, setOpenMaintenanceTasksCount] = useState<number>(0)
 
   useEffect(() => {
     loadOrders()
     loadInvoices()
+    loadMaintenanceTasksCount()
   }, [])
 
   const loadOrders = async () => {
@@ -90,6 +92,24 @@ function HubScreen({ userName, userRole, userImageUrl, onSignOut }: HubScreenPro
     }
   }
 
+  const loadMaintenanceTasksCount = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/maintenance/tasks/stats`)
+      if (!res.ok) {
+        console.error('Failed to load maintenance tasks stats:', res.status)
+        return
+      }
+      const data = await res.json()
+      // Sum up all open tasks from all units
+      const totalOpen = (data || []).reduce((sum: number, stat: any) => {
+        return sum + (stat.open || 0)
+      }, 0)
+      setOpenMaintenanceTasksCount(totalOpen)
+    } catch (err) {
+      console.error('Error loading maintenance tasks count:', err)
+    }
+  }
+
   const totals = useMemo(() => {
     const totalPaid = orders.reduce((sum, o) => sum + o.paidAmount, 0)
     return { count: orders.length, totalPaid }
@@ -132,30 +152,13 @@ function HubScreen({ userName, userRole, userImageUrl, onSignOut }: HubScreenPro
             }}
             type="button"
           >
-            <span className="hub-signout-icon">🚪</span>
+            <span className="hub-signout-icon">🛑</span>
             <span className="hub-signout-text">יציאה</span>
           </button>
           <div className="hub-user-chip">
             <span className="hub-user-chip-text">שלום {userName}</span>
           </div>
         </div>
-
-        {canSeeEverything && (
-          <div className="hub-stats-grid">
-            <div className="hub-stat-card hub-stat-card-blue">
-              <div className="hub-stat-value">{totals.count}</div>
-              <div className="hub-stat-label">מספר הזמנות</div>
-            </div>
-            <div className="hub-stat-card hub-stat-card-green">
-              <div className="hub-stat-value">₪{totalRevenue.toLocaleString('he-IL')}</div>
-              <div className="hub-stat-label">הכנסות</div>
-            </div>
-            <div className="hub-stat-card hub-stat-card-red">
-              <div className="hub-stat-value">₪{totalExpenses.toLocaleString('he-IL')}</div>
-              <div className="hub-stat-label">הוצאות</div>
-            </div>
-          </div>
-        )}
 
         <div className="hub-welcome-section">
           <div className="hub-welcome-card">
@@ -168,6 +171,13 @@ function HubScreen({ userName, userRole, userImageUrl, onSignOut }: HubScreenPro
                 </div>
               )}
             </div>
+            <button
+              className="hub-welcome-chat-button"
+              onClick={() => navigate('/chat')}
+              type="button"
+            >
+              <span className="hub-welcome-chat-icon">💬</span>
+            </button>
             <div className="hub-welcome-content">
               <h2 className="hub-welcome-title">שלום {userName}</h2>
               <p className="hub-welcome-subtitle">ברוך הבא למערכת הניהול</p>
@@ -224,7 +234,11 @@ function HubScreen({ userName, userRole, userImageUrl, onSignOut }: HubScreenPro
               className="hub-quick-action-btn hub-quick-action-green"
               onClick={() => navigate('/maintenance')}
               type="button"
+              style={{ position: 'relative' }}
             >
+              {openMaintenanceTasksCount > 0 && (
+                <span className="hub-maintenance-badge">{openMaintenanceTasksCount}</span>
+              )}
               <span className="hub-quick-action-icon">🛠️</span>
               <span className="hub-quick-action-text">תחזוקה</span>
             </button>

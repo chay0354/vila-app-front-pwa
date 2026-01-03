@@ -103,13 +103,35 @@ function SignInScreen({ mode = 'signin', onSignIn }: SignInScreenProps) {
       console.log('Auth response data:', data)
 
       if (!res.ok) {
-        const errorMsg = data.detail || data.message || `שגיאה ${res.status}: ${res.statusText}`
+        let errorMsg = data.detail || data.message || `שגיאה ${res.status}: ${res.statusText}`
+        // Translate common error messages to Hebrew
+        if (errorMsg.includes('pending approval') || errorMsg.includes('Pending approval')) {
+          errorMsg = 'החשבון שלך ממתין לאישור מנהל. אנא חכה לאישור כדי להתחבר.'
+        } else if (errorMsg.includes('Invalid username or password')) {
+          errorMsg = 'שם משתמש או סיסמה שגויים'
+        }
         setError(errorMsg)
         setIsLoading(false)
         return
       }
 
-      // Success - set user and navigate to hub
+      // For signup, check approval status
+      if (mode === 'signup') {
+        const approvalStatus = data.approval_status || 'approved'
+        if (approvalStatus === 'pending') {
+          // Account created but pending approval - don't log in
+          setError('החשבון נוצר בהצלחה! חכה לאישור מנהל כדי להתחבר.')
+          setName('')
+          setPassword('')
+          setConfirmPassword('')
+          setImagePreview(null)
+          setImageFile(null)
+          setIsLoading(false)
+          return
+        }
+      }
+
+      // Success - set user and navigate to hub (only if approved or login)
       const username = data.username || name.trim()
       onSignIn(
         username,

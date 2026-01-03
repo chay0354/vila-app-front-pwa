@@ -456,7 +456,7 @@ function App() {
           path="/employee-management" 
           element={
             userName && (userRole === 'מנהל ראשי' || userRole === 'מנהל הזמנות' || userRole === 'מנהל מתחם' || userRole === 'מנהל') ? (
-              <EmployeeManagementScreen />
+              <EmployeeManagementScreen userName={userName} />
             ) : (
               <Navigate to="/hub" replace />
             )

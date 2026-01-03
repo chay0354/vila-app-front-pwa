@@ -18,17 +18,28 @@ type AttendanceLog = {
   clock_out?: string | null
 }
 
-type EmployeeManagementScreenProps = {
+type PendingApproval = {
+  id: string
+  username: string
+  role?: string | null
+  image_url?: string | null
+  created_at?: string | null
 }
 
-function EmployeeManagementScreen({}: EmployeeManagementScreenProps) {
+type EmployeeManagementScreenProps = {
+  userName: string
+}
+
+function EmployeeManagementScreen({ userName }: EmployeeManagementScreenProps) {
   const navigate = useNavigate()
   const [employees, setEmployees] = useState<Employee[]>([])
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([])
+  const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([])
   const [loading, setLoading] = useState(true)
   const [editingWage, setEditingWage] = useState<string | null>(null)
   const [wageInput, setWageInput] = useState<string>('')
   const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null)
+  const isAdmin = userName.toLowerCase() === 'admin'
 
   useEffect(() => {
     loadData()
@@ -36,8 +47,26 @@ function EmployeeManagementScreen({}: EmployeeManagementScreenProps) {
 
   const loadData = async () => {
     setLoading(true)
-    await Promise.all([loadEmployees(), loadAttendanceLogs()])
+    const promises = [loadEmployees(), loadAttendanceLogs()]
+    if (isAdmin) {
+      promises.push(loadPendingApprovals())
+    }
+    await Promise.all(promises)
     setLoading(false)
+  }
+
+  const loadPendingApprovals = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/users/pending-approvals`)
+      if (!res.ok) {
+        console.error('Failed to load pending approvals:', res.status)
+        return
+      }
+      const data = await res.json()
+      setPendingApprovals(data || [])
+    } catch (err) {
+      console.error('Error loading pending approvals:', err)
+    }
   }
 
   const loadEmployees = async () => {
@@ -106,6 +135,43 @@ function EmployeeManagementScreen({}: EmployeeManagementScreenProps) {
   const handleCancelEdit = () => {
     setEditingWage(null)
     setWageInput('')
+  }
+
+  const handleApproveUser = async (userId: string) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/users/${userId}/approve`, {
+        method: 'PATCH',
+      })
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ detail: 'שגיאה לא ידועה' }))
+        alert(errorData.detail || 'לא ניתן לאשר את המשתמש')
+        return
+      }
+      await loadPendingApprovals()
+      alert('המשתמש אושר בהצלחה')
+    } catch (err: any) {
+      alert(err.message || 'אירעה שגיאה באישור המשתמש')
+    }
+  }
+
+  const handleRejectUser = async (userId: string) => {
+    if (!confirm('האם אתה בטוח שברצונך לדחות את המשתמש? פעולה זו תמחק את המשתמש.')) {
+      return
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/users/${userId}/reject`, {
+        method: 'PATCH',
+      })
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ detail: 'שגיאה לא ידועה' }))
+        alert(errorData.detail || 'לא ניתן לדחות את המשתמש')
+        return
+      }
+      await loadPendingApprovals()
+      alert('המשתמש נדחה והוסר בהצלחה')
+    } catch (err: any) {
+      alert(err.message || 'אירעה שגיאה בדחיית המשתמש')
+    }
   }
 
   const getFilteredLogs = (employeeUsername: string) => {
@@ -206,6 +272,56 @@ function EmployeeManagementScreen({}: EmployeeManagementScreenProps) {
         <div className="employee-management-title-section">
           <h1 className="employee-management-title">ניהול עובדים</h1>
         </div>
+
+        {isAdmin && pendingApprovals.length > 0 && (
+          <div className="employee-approvals-section">
+            <h2 className="employee-approvals-title">אישורי כניסה למערכת</h2>
+            <div className="employee-approvals-list">
+              {pendingApprovals.map(approval => (
+                <div key={approval.id} className="employee-approval-card">
+                  <div className="employee-approval-header">
+                    <div className="employee-approval-avatar">
+                      {approval.image_url ? (
+                        <img src={approval.image_url} alt={approval.username} className="employee-approval-avatar-image" />
+                      ) : (
+                        <div className="employee-approval-avatar-placeholder">
+                          <span className="employee-approval-avatar-icon">👤</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="employee-approval-info">
+                      <h3 className="employee-approval-name">{approval.username}</h3>
+                      {approval.role && (
+                        <p className="employee-approval-role">{approval.role}</p>
+                      )}
+                      {approval.created_at && (
+                        <p className="employee-approval-date">
+                          נרשם: {new Date(approval.created_at).toLocaleDateString('he-IL')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="employee-approval-actions">
+                    <button
+                      className="employee-approval-approve"
+                      onClick={() => handleApproveUser(approval.id)}
+                      type="button"
+                    >
+                      ✓ אישר
+                    </button>
+                    <button
+                      className="employee-approval-reject"
+                      onClick={() => handleRejectUser(approval.id)}
+                      type="button"
+                    >
+                      ✗ דחה
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="employee-management-grid">
           {employeesWithStats.map(emp => (

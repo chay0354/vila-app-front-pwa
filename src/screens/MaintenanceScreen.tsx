@@ -71,13 +71,87 @@ function MaintenanceScreen({}: MaintenanceScreenProps) {
   }
 
   const getUnitStats = (unit: MaintenanceUnit) => {
+    const today = new Date().toISOString().split('T')[0]
     const open = unit.tasks.filter(t => t.status === 'פתוח').length
     const closed = unit.tasks.filter(t => t.status === 'סגור').length
-    return { open, closed, total: unit.tasks.length }
+    const openedToday = unit.tasks.filter(t => t.status === 'פתוח' && t.createdDate === today).length
+    const closedToday = unit.tasks.filter(t => t.status === 'סגור' && t.createdDate === today).length
+    return { open, closed, total: unit.tasks.length, openedToday, closedToday }
   }
 
   // Check if data has been loaded (any unit has tasks or we've attempted to load)
   const hasLoadedData = units.some(u => u.tasks.length > 0) || !isLoading
+
+  const renderUnitCard = (unit: MaintenanceUnit) => {
+    const stats = getUnitStats(unit)
+    return (
+      <div
+        key={unit.id}
+        className="maintenance-unit-card"
+        onClick={() => navigate(`/maintenance/${unit.id}/tasks`)}
+      >
+        <div className="maintenance-unit-card-header">
+          <div className="maintenance-unit-icon">
+            <span className="maintenance-unit-icon-text">
+              {unit.type === 'יחידה' ? '🏠' : '🏡'}
+            </span>
+          </div>
+          <button
+            className="maintenance-unit-open-task-button"
+            onClick={(e) => {
+              e.stopPropagation()
+              navigate(`/maintenance/${unit.id}/new-task`)
+            }}
+            type="button"
+          >
+            פתח קריאה
+          </button>
+          <div className="maintenance-unit-card-content">
+            <h3 className="maintenance-unit-card-name">{unit.name}</h3>
+            <p className="maintenance-unit-card-type">{unit.type}</p>
+          </div>
+        </div>
+        <div className="maintenance-unit-stats">
+          {isLoading && !hasLoadedData ? (
+            <div className="maintenance-unit-stat-item" style={{ width: '100%', alignItems: 'center', padding: '8px 0' }}>
+              <div className="maintenance-loading-spinner"></div>
+            </div>
+          ) : (
+            <>
+              <div className="maintenance-unit-stat-item">
+                <span className="maintenance-unit-stat-value">{stats.total}</span>
+                <span className="maintenance-unit-stat-label">סה״כ קריאות</span>
+              </div>
+              <div className="maintenance-unit-stat-item">
+                <span className="maintenance-unit-stat-value" style={{ color: '#f59e0b' }}>
+                  {stats.open}
+                </span>
+                <span className="maintenance-unit-stat-label">קריאות פתוחות</span>
+              </div>
+              <div className="maintenance-unit-stat-item">
+                <span className="maintenance-unit-stat-value" style={{ color: '#22c55e' }}>
+                  {stats.closed}
+                </span>
+                <span className="maintenance-unit-stat-label">קריאות סגורות</span>
+              </div>
+              <div className="maintenance-unit-stat-item">
+                <span className="maintenance-unit-stat-value" style={{ color: '#3b82f6' }}>
+                  {stats.openedToday}
+                </span>
+                <span className="maintenance-unit-stat-label">נפתח היום</span>
+              </div>
+              <div className="maintenance-unit-stat-item">
+                <span className="maintenance-unit-stat-value" style={{ color: '#8b5cf6' }}>
+                  {stats.closedToday}
+                </span>
+                <span className="maintenance-unit-stat-label">נסגר היום</span>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="maintenance-container">
@@ -95,54 +169,7 @@ function MaintenanceScreen({}: MaintenanceScreenProps) {
         </div>
 
         <div className="maintenance-units-grid">
-          {units.map(unit => {
-            const stats = getUnitStats(unit)
-            return (
-              <div
-                key={unit.id}
-                className="maintenance-unit-card"
-                onClick={() => navigate(`/maintenance/${unit.id}/tasks`)}
-              >
-                <div className="maintenance-unit-card-header">
-                  <div className="maintenance-unit-icon">
-                    <span className="maintenance-unit-icon-text">
-                      {unit.type === 'יחידה' ? '🏠' : '🏡'}
-                    </span>
-                  </div>
-                  <div className="maintenance-unit-card-content">
-                    <h3 className="maintenance-unit-card-name">{unit.name}</h3>
-                    <p className="maintenance-unit-card-type">{unit.type}</p>
-                  </div>
-                </div>
-                <div className="maintenance-unit-stats">
-                  {isLoading && !hasLoadedData ? (
-                    <div className="maintenance-unit-stat-item" style={{ width: '100%', alignItems: 'center', padding: '8px 0' }}>
-                      <div className="maintenance-loading-spinner"></div>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="maintenance-unit-stat-item">
-                        <span className="maintenance-unit-stat-value">{stats.total}</span>
-                        <span className="maintenance-unit-stat-label">סה״כ משימות</span>
-                      </div>
-                      <div className="maintenance-unit-stat-item">
-                        <span className="maintenance-unit-stat-value" style={{ color: '#f59e0b' }}>
-                          {stats.open}
-                        </span>
-                        <span className="maintenance-unit-stat-label">פתוחות</span>
-                      </div>
-                      <div className="maintenance-unit-stat-item">
-                        <span className="maintenance-unit-stat-value" style={{ color: '#22c55e' }}>
-                          {stats.closed}
-                        </span>
-                        <span className="maintenance-unit-stat-label">סגורות</span>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            )
-          })}
+          {units.map(renderUnitCard)}
         </div>
       </div>
     </div>

@@ -54,6 +54,20 @@
   margin: 0;
 }
 
+.maintenance-units-section {
+  margin-bottom: 32px;
+}
+
+.maintenance-units-section-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+  text-align: right;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e2e8f0;
+}
+
 .maintenance-units-grid {
   display: flex;
   flex-direction: column;
@@ -99,6 +113,29 @@
 
 .maintenance-unit-card-content {
   flex: 1;
+}
+
+.maintenance-unit-open-task-button {
+  background-color: #3b82f6;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+  white-space: nowrap;
+  margin-left: 12px;
+}
+
+.maintenance-unit-open-task-button:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.maintenance-unit-open-task-button:active {
+  transform: translateY(0);
 }
 
 .maintenance-unit-card-name {

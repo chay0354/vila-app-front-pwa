@@ -157,6 +157,34 @@
   border: 3px solid rgba(255, 255, 255, 0.3);
 }
 
+.hub-welcome-chat-button {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.hub-welcome-chat-button:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+  transform: scale(1.05);
+}
+
+.hub-welcome-chat-button:active {
+  transform: scale(0.95);
+}
+
+.hub-welcome-chat-icon {
+  font-size: 40px;
+}
+
 .hub-welcome-content {
   flex: 1;
   display: flex;
@@ -230,6 +258,26 @@
 
 .hub-quick-action-green {
   background-color: #22c55e;
+}
+
+.hub-maintenance-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background-color: #ef4444;
+  color: #ffffff;
+  border-radius: 12px;
+  min-width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 6px;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
+  z-index: 10;
 }
 
 .hub-quick-action-orange {

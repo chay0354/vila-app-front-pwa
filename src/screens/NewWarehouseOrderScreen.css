@@ -232,3 +232,206 @@
   cursor: not-allowed;
 }
 
+/* Product Categories */
+.new-warehouse-order-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.new-warehouse-order-category {
+  background-color: #fff;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+.new-warehouse-order-category-header {
+  width: 100%;
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background-color: #f8fafc;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.new-warehouse-order-category-header:hover {
+  background-color: #f1f5f9;
+}
+
+.new-warehouse-order-category-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.new-warehouse-order-category-toggle {
+  font-size: 14px;
+  color: #64748b;
+}
+
+.new-warehouse-order-products-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.new-warehouse-order-product-option {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 2px solid #e2e8f0;
+  background-color: #fff;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.new-warehouse-order-product-option:hover {
+  border-color: #3b82f6;
+  background-color: #f8fafc;
+}
+
+.new-warehouse-order-product-option.selected {
+  border-color: #3b82f6;
+  background-color: #eff6ff;
+}
+
+.new-warehouse-order-product-option-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #0f172a;
+  text-align: right;
+}
+
+.new-warehouse-order-product-option-quantity {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+
+.new-warehouse-order-quantity-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background-color: #fff;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.new-warehouse-order-quantity-btn:hover {
+  background-color: #f1f5f9;
+  border-color: #3b82f6;
+}
+
+.new-warehouse-order-quantity-input-small {
+  width: 60px;
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  font-size: 14px;
+  text-align: center;
+  background-color: #fff;
+  color: #0f172a;
+}
+
+.new-warehouse-order-quantity-input-small:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+/* Selected Products Summary */
+.new-warehouse-order-selected-summary {
+  background-color: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  margin-bottom: 24px;
+}
+
+.new-warehouse-order-selected-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  text-align: right;
+  margin: 0 0 16px 0;
+}
+
+.new-warehouse-order-selected-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.new-warehouse-order-selected-item {
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background-color: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.new-warehouse-order-selected-item-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #0f172a;
+  flex: 1;
+  text-align: right;
+}
+
+.new-warehouse-order-selected-item-controls {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 8px;
+}
+
+.new-warehouse-order-selected-quantity {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  min-width: 30px;
+  text-align: center;
+}
+
+.new-warehouse-order-remove-selected-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background-color: #ef4444;
+  border: none;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s;
+}
+
+.new-warehouse-order-remove-selected-btn:hover {
+  opacity: 0.9;
+}
+

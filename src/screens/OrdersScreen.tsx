@@ -39,6 +39,8 @@ function OrdersScreen({ userName }: OrdersScreenProps) {
         paidAmount: Number(o.paid_amount ?? o.paidAmount ?? 0),
         totalAmount: Number(o.total_amount ?? o.totalAmount ?? 0),
         paymentMethod: o.payment_method ?? o.paymentMethod ?? 'לא צוין',
+        createdBy: o.created_by ?? o.createdBy ?? undefined,
+        openedBy: o.opened_by ?? o.openedBy ?? undefined,
       }))
       setOrders(list)
     } catch (err) {
@@ -84,6 +86,31 @@ function OrdersScreen({ userName }: OrdersScreenProps) {
     return { total, paid, unpaid }
   }
 
+  const handleCloseOrder = async (orderId: string, paymentMethod: string) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/orders/${orderId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'שולם',
+          payment_method: paymentMethod,
+        }),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ detail: 'שגיאה לא ידועה' }))
+        alert(errorData.detail || 'לא ניתן לסגור את ההזמנה')
+        return
+      }
+
+      // Reload orders to reflect the change
+      await loadOrders()
+    } catch (err: any) {
+      console.error('Error closing order:', err)
+      alert(err.message || 'אירעה שגיאה בסגירת ההזמנה')
+    }
+  }
+
   const createOrder = async () => {
     try {
       const today = new Date().toISOString().split('T')[0]
@@ -101,6 +128,7 @@ function OrdersScreen({ userName }: OrdersScreenProps) {
         paid_amount: 0,
         total_amount: 0,
         payment_method: null,
+        opened_by: userName || undefined,
       }
 
       const res = await fetch(`${API_BASE_URL}/orders`, {
@@ -147,7 +175,13 @@ function OrdersScreen({ userName }: OrdersScreenProps) {
       <div className="orders-header">
         <button
           className="orders-back-button"
-          onClick={() => navigate('/hub')}
+          onClick={() => {
+            if (selectedUnit) {
+              setSelectedUnit(null)
+            } else {
+              navigate('/hub')
+            }
+          }}
           type="button"
         >
           ← חזרה
@@ -199,13 +233,6 @@ function OrdersScreen({ userName }: OrdersScreenProps) {
         ) : selectedUnit ? (
           <div>
             <div className="orders-unit-header">
-              <button
-                className="orders-back-to-units-button"
-                onClick={() => setSelectedUnit(null)}
-                type="button"
-              >
-                ← חזרה לרשימת יחידות
-              </button>
               <h2 className="orders-unit-title">הזמנות - {selectedUnit}</h2>
             </div>
             <div className="orders-list">
@@ -216,6 +243,7 @@ function OrdersScreen({ userName }: OrdersScreenProps) {
                     key={order.id}
                     order={order}
                     onEdit={(id) => navigate(`/orders/${id}`)}
+                    onClose={handleCloseOrder}
                   />
                 ))}
             </div>

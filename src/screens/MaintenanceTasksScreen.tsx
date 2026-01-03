@@ -14,6 +14,7 @@ function MaintenanceTasksScreen({}: MaintenanceTasksScreenProps) {
   const { unitId } = useParams<{ unitId: string }>()
   const [unit, setUnit] = useState<MaintenanceUnit | null>(null)
   const [systemUsers, setSystemUsers] = useState<Array<{ id: string; username: string }>>([])
+  const [filter, setFilter] = useState<'all' | 'open' | 'closed'>('all')
 
   useEffect(() => {
     loadSystemUsers()
@@ -58,6 +59,7 @@ function MaintenanceTasksScreen({}: MaintenanceTasksScreenProps) {
           createdDate: (t.created_date || t.createdDate || new Date().toISOString().split('T')[0]).toString(),
           assignedTo: (t.assigned_to || t.assignedTo || undefined)?.toString(),
           imageUri: (t.image_uri || t.imageUri || undefined)?.toString(),
+          room: (t.room || undefined)?.toString(),
         }
 
         taskUnit.tasks.push(task)
@@ -129,23 +131,45 @@ function MaintenanceTasksScreen({}: MaintenanceTasksScreenProps) {
         </div>
 
         <div className="maintenance-tasks-header-row">
-          <h2 className="maintenance-tasks-section-title">משימות תחזוקה</h2>
-          <button
-            className="maintenance-tasks-add-button"
-            onClick={() => navigate(`/maintenance/${unit.id}/new-task`)}
-            type="button"
-          >
-            + משימה חדשה
-          </button>
+          <div className="maintenance-tasks-filter">
+            <button
+              className={`maintenance-tasks-filter-button ${filter === 'closed' ? 'active' : ''}`}
+              onClick={() => setFilter('closed')}
+              type="button"
+            >
+              קריאות סגורות
+            </button>
+            <button
+              className={`maintenance-tasks-filter-button ${filter === 'open' ? 'active' : ''}`}
+              onClick={() => setFilter('open')}
+              type="button"
+            >
+              קריאות פתוחות
+            </button>
+            <button
+              className={`maintenance-tasks-filter-button ${filter === 'all' ? 'active' : ''}`}
+              onClick={() => setFilter('all')}
+              type="button"
+            >
+              סה״כ קריאות
+            </button>
+          </div>
         </div>
 
-        {unit.tasks.length === 0 ? (
-          <div className="maintenance-tasks-empty-state">
-            <p className="maintenance-tasks-empty-state-text">אין משימות תחזוקה ליחידה זו</p>
-          </div>
-        ) : (
-          <div className="maintenance-tasks-list">
-            {unit.tasks.map(task => (
+        {(() => {
+          const filteredTasks = filter === 'all' 
+            ? unit.tasks 
+            : filter === 'open' 
+            ? unit.tasks.filter(t => t.status === 'פתוח')
+            : unit.tasks.filter(t => t.status === 'סגור')
+          
+          return filteredTasks.length === 0 ? (
+            <div className="maintenance-tasks-empty-state">
+              <p className="maintenance-tasks-empty-state-text">אין משימות תחזוקה ליחידה זו</p>
+            </div>
+          ) : (
+            <div className="maintenance-tasks-list">
+              {filteredTasks.map(task => (
               <div
                 key={task.id}
                 className="maintenance-task-card"
@@ -162,6 +186,11 @@ function MaintenanceTasksScreen({}: MaintenanceTasksScreenProps) {
                     >
                       {task.status}
                     </span>
+                    {task.room && (
+                      <span className="maintenance-task-room-badge">
+                        חדר {task.room}
+                      </span>
+                    )}
                   </div>
                   <div className="maintenance-task-card-content">
                     <h3 className="maintenance-task-card-title">{task.title}</h3>
@@ -182,9 +211,10 @@ function MaintenanceTasksScreen({}: MaintenanceTasksScreenProps) {
                   </div>
                 )}
               </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )
+        })()}
       </div>
     </div>
   )

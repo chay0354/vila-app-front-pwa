@@ -46,6 +46,141 @@
   margin: 0;
 }
 
+.employee-approvals-section {
+  background: #fff7ed;
+  border: 2px solid #fb923c;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.employee-approvals-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #9a3412;
+  margin: 0 0 16px 0;
+  text-align: right;
+}
+
+.employee-approvals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.employee-approval-card {
+  background: #ffffff;
+  border: 1px solid #fed7aa;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.employee-approval-header {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.employee-approval-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.employee-approval-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.employee-approval-avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  background: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.employee-approval-avatar-icon {
+  font-size: 24px;
+}
+
+.employee-approval-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.employee-approval-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.employee-approval-role {
+  font-size: 14px;
+  color: #64748b;
+  margin: 0;
+}
+
+.employee-approval-date {
+  font-size: 12px;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.employee-approval-actions {
+  display: flex;
+  flex-direction: row-reverse;
+  gap: 8px;
+}
+
+.employee-approval-approve {
+  padding: 8px 16px;
+  border-radius: 8px;
+  background-color: #22c55e;
+  border: none;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.employee-approval-approve:hover {
+  background-color: #16a34a;
+  transform: translateY(-1px);
+}
+
+.employee-approval-reject {
+  padding: 8px 16px;
+  border-radius: 8px;
+  background-color: #ef4444;
+  border: none;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.employee-approval-reject:hover {
+  background-color: #dc2626;
+  transform: translateY(-1px);
+}
+
 
 .employee-management-grid {
   display: grid;

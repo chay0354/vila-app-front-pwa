@@ -199,21 +199,23 @@
   flex: 1;
 }
 
-.order-edit-add-payment-trigger {
-  background-color: #f0f9ff;
-  border: 1px solid #bae6fd;
+.order-edit-back-button {
+  background-color: #f1f5f9;
+  border: 1px solid #cbd5e1;
   border-radius: 10px;
   padding: 10px 16px;
-  color: #0c4a6e;
+  color: #475569;
   font-weight: 700;
   font-size: 14px;
   cursor: pointer;
-  transition: opacity 0.2s, background-color 0.2s;
+  transition: all 0.2s;
+  white-space: nowrap;
 }
 
-.order-edit-add-payment-trigger:hover {
-  opacity: 0.9;
-  background-color: #e0f2fe;
+.order-edit-back-button:hover {
+  background-color: #e2e8f0;
+  border-color: #94a3b8;
+  transform: translateY(-1px);
 }
 
 .order-edit-add-payment-row {

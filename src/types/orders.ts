@@ -13,6 +13,8 @@ export type Order = {
   paidAmount: number
   totalAmount: number
   paymentMethod: string
+  createdBy?: string
+  openedBy?: string
 }
 
 export const statusOptions: OrderStatus[] = [

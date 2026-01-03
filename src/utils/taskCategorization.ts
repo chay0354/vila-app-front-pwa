@@ -69,13 +69,14 @@ export function categorizeTasks(tasks: InspectionTask[]): TaskCategory[] {
   return orderedCategories
 }
 
-// Categorize cleaning inspection tasks by category (מטבח, סלון, מסדרון, חצר)
+// Categorize cleaning inspection tasks by category (מטבח, סלון, מסדרון, חצר, חדרים)
 export function categorizeCleaningTasks(tasks: InspectionTask[]): TaskCategory[] {
   const categories: { [key: string]: InspectionTask[] } = {
     'מטבח': [],
     'סלון': [],
     'מסדרון': [],
     'חצר': [],
+    'חדרים': [],
   }
 
   tasks.forEach(task => {
@@ -97,6 +98,10 @@ export function categorizeCleaningTasks(tasks: InspectionTask[]): TaskCategory[]
     else if (taskId >= 24 && taskId <= 31) {
       categories['חצר'].push(task)
     }
+    // חדרים (Rooms) - tasks 32-39
+    else if (taskId >= 32 && taskId <= 39) {
+      categories['חדרים'].push(task)
+    }
     // Fallback: try to categorize by name
     else {
       const taskName = task.name.toLowerCase()
@@ -116,6 +121,8 @@ export function categorizeCleaningTasks(tasks: InspectionTask[]): TaskCategory[]
                  taskName.includes('ברזים') || taskName.includes('עציצים') ||
                  taskName.includes('רצפה בחוץ')) {
         categories['חצר'].push(task)
+      } else if (taskName.includes('חדר')) {
+        categories['חדרים'].push(task)
       } else {
         // Default to מטבח if can't determine
         categories['מטבח'].push(task)
@@ -125,7 +132,7 @@ export function categorizeCleaningTasks(tasks: InspectionTask[]): TaskCategory[]
 
   // Return only categories that have tasks, in a specific order
   const orderedCategories: TaskCategory[] = []
-  const categoryOrder = ['מטבח', 'סלון', 'מסדרון', 'חצר']
+  const categoryOrder = ['מטבח', 'סלון', 'מסדרון', 'חצר', 'חדרים']
   
   categoryOrder.forEach(categoryName => {
     if (categories[categoryName].length > 0) {

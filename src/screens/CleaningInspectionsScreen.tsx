@@ -353,9 +353,19 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
 
   // Sort missions by departure date
   const sortedMissions = useMemo(() => {
-    return [...inspectionMissions].sort((a, b) =>
-      (a.departureDate || '').localeCompare(b.departureDate || '')
-    )
+    return [...inspectionMissions].sort((a, b) => {
+      const aStatus = computeInspectionStatus(a)
+      const bStatus = computeInspectionStatus(b)
+      const aIsClosed = aStatus === 'הביקורת הושלמה'
+      const bIsClosed = bStatus === 'הביקורת הושלמה'
+      
+      // Put closed missions at the bottom
+      if (aIsClosed && !bIsClosed) return 1
+      if (!aIsClosed && bIsClosed) return -1
+      
+      // For same status, sort by date
+      return (a.departureDate || '').localeCompare(b.departureDate || '')
+    })
   }, [inspectionMissions])
 
   return (
@@ -383,15 +393,7 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
         
         <div className="cleaning-inspections-title-section">
           <div>
-            <h1 className="cleaning-inspections-title">ביקורת ניקיון</h1>
-            <p className="cleaning-inspections-subtitle">
-              ניהול משימות ניקיון וביקורת לאחר עזיבת אורחים
-            </p>
-          </div>
-          <div className="cleaning-inspections-stats-badge">
-            <span className="cleaning-inspections-stats-badge-text">
-              {sortedMissions.length} משימות
-            </span>
+            <h1 className="cleaning-inspections-title">ביקורת ניקיון מנקה</h1>
           </div>
         </div>
 
