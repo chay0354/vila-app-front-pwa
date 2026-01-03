@@ -178,50 +178,74 @@ function MaintenanceTasksScreen({}: MaintenanceTasksScreenProps) {
           }
           
           const renderTaskCard = (task: MaintenanceTask) => (
-              <div
-                key={task.id}
-                className="maintenance-task-card"
-                onClick={() => navigate(`/maintenance/${unit.id}/tasks/${task.id}`)}
-              >
-                <div className="maintenance-task-card-header">
-                  <div className="maintenance-task-card-badges">
-                    <span
-                      className="maintenance-task-status-badge"
-                      style={{
-                        backgroundColor: getStatusColor(task.status) + '22',
-                        color: getStatusColor(task.status),
-                      }}
-                    >
-                      {task.status}
+            <div
+              key={task.id}
+              className="maintenance-task-card"
+              onClick={() => navigate(`/maintenance/${unit.id}/tasks/${task.id}`)}
+            >
+              <div className="maintenance-task-card-header">
+                <div className="maintenance-task-card-badges">
+                  <span
+                    className="maintenance-task-status-badge"
+                    style={{
+                      backgroundColor: getStatusColor(task.status) + '22',
+                      color: getStatusColor(task.status),
+                    }}
+                  >
+                    {task.status}
+                  </span>
+                  {task.room && (
+                    <span className="maintenance-task-room-badge">
+                      חדר {task.room}
                     </span>
-                    {task.room && (
-                      <span className="maintenance-task-room-badge">
-                        חדר {task.room}
-                      </span>
-                    )}
-                  </div>
-                  <div className="maintenance-task-card-content">
-                    <h3 className="maintenance-task-card-title">{task.title}</h3>
-                    <p className="maintenance-task-card-description">{task.description}</p>
-                    <div className="maintenance-task-card-meta">
-                      <span className="maintenance-task-card-meta-text">תאריך: {task.createdDate}</span>
-                    </div>
-                    {task.assignedTo && (
-                      <p className="maintenance-task-card-assigned">
-                        מוקצה ל: {resolveAssignee(task.assignedTo)}
-                      </p>
-                    )}
-                  </div>
+                  )}
                 </div>
-                {task.imageUri && (
-                  <div className="maintenance-task-image-indicator">
-                    <span className="maintenance-task-image-indicator-text">📎 מדיה מצורפת</span>
+                <div className="maintenance-task-card-content">
+                  <h3 className="maintenance-task-card-title">{task.title}</h3>
+                  <p className="maintenance-task-card-description">{task.description}</p>
+                  <div className="maintenance-task-card-meta">
+                    <span className="maintenance-task-card-meta-text">תאריך: {task.createdDate}</span>
                   </div>
-                )}
+                  {task.assignedTo && (
+                    <p className="maintenance-task-card-assigned">
+                      מוקצה ל: {resolveAssignee(task.assignedTo)}
+                    </p>
+                  )}
+                </div>
               </div>
-              ))}
+              {task.imageUri && (
+                <div className="maintenance-task-image-indicator">
+                  <span className="maintenance-task-image-indicator-text">📎 מדיה מצורפת</span>
+                </div>
+              )}
             </div>
-          )
+          );
+          
+          return (
+            <>
+              {tasksOpenedToday.length > 0 && (
+                <>
+                  <div className="maintenance-tasks-section-header">
+                    <h3 className="maintenance-tasks-section-title">נפתחו היום</h3>
+                  </div>
+                  <div className="maintenance-tasks-list">
+                    {tasksOpenedToday.map(renderTaskCard)}
+                  </div>
+                </>
+              )}
+              
+              {tasksNotToday.length > 0 && (
+                <>
+                  <div className="maintenance-tasks-section-header">
+                    <h3 className="maintenance-tasks-section-title">לא מהיום</h3>
+                  </div>
+                  <div className="maintenance-tasks-list">
+                    {tasksNotToday.map(renderTaskCard)}
+                  </div>
+                </>
+              )}
+            </>
+          );
         })()}
       </div>
     </div>
