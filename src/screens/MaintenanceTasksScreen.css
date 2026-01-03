@@ -122,6 +122,24 @@
   margin: 0;
 }
 
+.maintenance-tasks-section-header {
+  margin-top: 24px;
+  margin-bottom: 12px;
+  padding: 0 18px;
+}
+
+.maintenance-tasks-section-header:first-child {
+  margin-top: 0;
+}
+
+.maintenance-tasks-section-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+  text-align: right;
+  margin: 0;
+}
+
 .maintenance-tasks-list {
   display: flex;
   flex-direction: column;

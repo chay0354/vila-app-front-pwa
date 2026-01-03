@@ -157,19 +157,27 @@ function MaintenanceTasksScreen({}: MaintenanceTasksScreenProps) {
         </div>
 
         {(() => {
+          const today = new Date().toISOString().split('T')[0];
+          
           const filteredTasks = filter === 'all' 
             ? unit.tasks 
             : filter === 'open' 
             ? unit.tasks.filter(t => t.status === 'פתוח')
             : unit.tasks.filter(t => t.status === 'סגור')
           
-          return filteredTasks.length === 0 ? (
-            <div className="maintenance-tasks-empty-state">
-              <p className="maintenance-tasks-empty-state-text">אין משימות תחזוקה ליחידה זו</p>
-            </div>
-          ) : (
-            <div className="maintenance-tasks-list">
-              {filteredTasks.map(task => (
+          // Separate tasks into "opened today" and "not today"
+          const tasksOpenedToday = filteredTasks.filter(t => t.createdDate === today);
+          const tasksNotToday = filteredTasks.filter(t => t.createdDate !== today);
+          
+          if (filteredTasks.length === 0) {
+            return (
+              <div className="maintenance-tasks-empty-state">
+                <p className="maintenance-tasks-empty-state-text">אין משימות תחזוקה ליחידה זו</p>
+              </div>
+            );
+          }
+          
+          const renderTaskCard = (task: MaintenanceTask) => (
               <div
                 key={task.id}
                 className="maintenance-task-card"
