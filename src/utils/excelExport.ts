@@ -7,7 +7,7 @@ export function exportToExcel(data: any[][], filename: string) {
   XLSX.writeFile(wb, filename)
 }
 
-export function exportOrdersReport(ordersByUnit: any[], orders: any[], formatMoney: (v: number) => string) {
+export function exportOrdersReport(ordersByUnit: any[], orders: any[]) {
   const data: any[][] = [
     ['דוח הזמנות'],
     [''],

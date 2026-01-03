@@ -5,12 +5,6 @@ import { InventoryOrder, InventoryOrderItem } from '../types/warehouse'
 import { UNIT_CATEGORIES } from '../types/orders'
 import './NewWarehouseOrderScreen.css'
 
-type ProductEntry = {
-  id: string
-  name: string
-  quantity: string
-}
-
 type ProductCategory = {
   name: string
   products: string[]

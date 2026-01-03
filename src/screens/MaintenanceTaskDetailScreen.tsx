@@ -317,6 +317,7 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
   const isVideo = task.imageUri?.startsWith('data:video/') || task.imageUri?.includes('.mp4') || task.imageUri?.includes('.mov') || task.imageUri?.includes('/vidoes/') || task.imageUri?.includes('/storage/v1/object/public/vidoes/')
   const editIsVideo = editMediaUri?.startsWith('data:video/') || editMediaUri?.includes('.mp4') || editMediaUri?.includes('.mov') || editMediaUri?.includes('/vidoes/') || editMediaUri?.includes('/storage/v1/object/public/vidoes/')
   const closeIsVideo = closeModalImageUri?.startsWith('data:video/') || closeModalImageUri?.includes('.mp4') || closeModalImageUri?.includes('.mov') || closeModalImageUri?.includes('/vidoes/') || closeModalImageUri?.includes('/storage/v1/object/public/vidoes/')
+  const closingIsVideo = task.closingImageUri?.startsWith('data:video/') || task.closingImageUri?.includes('.mp4') || task.closingImageUri?.includes('.mov') || task.closingImageUri?.includes('/vidoes/') || task.closingImageUri?.includes('/storage/v1/object/public/vidoes/')
 
   return (
     <div className="maintenance-task-detail-container">

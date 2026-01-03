@@ -852,7 +852,7 @@ function ReportsScreen({}: ReportsScreenProps) {
                   className="reports-export-button"
                   onClick={() => {
                     if (activeReport === 'orders') {
-                      exportOrdersReport(ordersByUnitReport, orders, formatMoney)
+                      exportOrdersReport(ordersByUnitReport, orders)
                     } else if (activeReport === 'inspections') {
                       exportInspectionsReport(inspectionsByUnit, missions)
                     } else if (activeReport === 'warehouse') {
