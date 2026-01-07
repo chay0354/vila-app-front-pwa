@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { API_BASE_URL } from '../apiConfig'
-import { Order, OrderStatus, statusOptions, paymentOptions, UNIT_NAMES, UNIT_CATEGORIES } from '../types/orders'
+import { Order, OrderStatus, paymentOptions, UNIT_NAMES, UNIT_CATEGORIES } from '../types/orders'
 import './OrderEditScreen.css'
 
 type OrderEditScreenProps = {
@@ -27,7 +27,6 @@ function OrderEditScreen({ userName }: OrderEditScreenProps) {
   const [specialRequests, setSpecialRequests] = useState('')
   const [internalNotes, setInternalNotes] = useState('')
   const [addPayment, setAddPayment] = useState('')
-  const [statusOpen, setStatusOpen] = useState(false)
   const [methodOpen, setMethodOpen] = useState(false)
   const [unitOpen, setUnitOpen] = useState(false)
   const [showAddPayment, setShowAddPayment] = useState(false)
