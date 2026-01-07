@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Order, paymentOptions } from '../types/orders'
 import './OrderCard.css'
 
@@ -9,6 +10,7 @@ type OrderCardProps = {
 }
 
 function OrderCard({ order, onEdit, onClose }: OrderCardProps) {
+  const navigate = useNavigate()
   const [showCloseModal, setShowCloseModal] = useState(false)
   const [showOtherPayment, setShowOtherPayment] = useState(false)
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('')
@@ -35,7 +37,10 @@ function OrderCard({ order, onEdit, onClose }: OrderCardProps) {
   }
   
   const handleCloseWithCreditCard = () => {
-    handleCloseOrder('אשראי')
+    // Navigate to payment confirmation page (for now, skip payment page)
+    navigate(`/payment-confirmation/${order.id}?method=אשראי`)
+    setShowCloseModal(false)
+    setShowOtherPayment(false)
   }
   
   const handleCloseWithOther = () => {

@@ -14,7 +14,6 @@ function NewMaintenanceTaskScreen({ userName }: NewMaintenanceTaskScreenProps) {
   const { unitId } = useParams<{ unitId: string }>()
   const [unit, setUnit] = useState<MaintenanceUnit | null>(null)
   const [systemUsers, setSystemUsers] = useState<Array<{ id: string; username: string }>>([])
-  const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [assignedTo, setAssignedTo] = useState<string>('')
   const [showAssigneeModal, setShowAssigneeModal] = useState(false)
@@ -142,7 +141,7 @@ function NewMaintenanceTaskScreen({ userName }: NewMaintenanceTaskScreenProps) {
   }
 
   const handleSave = async () => {
-    if (!title || !description) {
+    if (!description) {
       alert('אנא מלאו את כל השדות הנדרשים')
       return
     }
@@ -156,7 +155,7 @@ function NewMaintenanceTaskScreen({ userName }: NewMaintenanceTaskScreenProps) {
       const jsonPayload: any = {
         id: `task-${Date.now()}`,
         unit_id: unit.id,
-        title,
+        title: description.substring(0, 100), // Use description as title since title field is removed
         description,
         status: 'פתוח',
         created_date: new Date().toISOString().split('T')[0],
@@ -215,7 +214,7 @@ function NewMaintenanceTaskScreen({ userName }: NewMaintenanceTaskScreenProps) {
       <div className="new-maintenance-task-header">
         <button
           className="new-maintenance-task-back-button"
-          onClick={() => navigate(`/maintenance/${unit.id}/tasks`)}
+          onClick={() => navigate('/maintenance')}
         >
           ← חזרה
         </button>
@@ -223,25 +222,14 @@ function NewMaintenanceTaskScreen({ userName }: NewMaintenanceTaskScreenProps) {
       <div className="new-maintenance-task-scroll">
         <div className="new-maintenance-task-title-section">
           <div>
-            <h1 className="new-maintenance-task-title">משימה חדשה</h1>
+            <h1 className="new-maintenance-task-title">קריאה חדשה {unit.name}</h1>
             <p className="new-maintenance-task-subtitle">הוספת משימת תחזוקה ל{unit.name}</p>
           </div>
         </div>
 
         <div className="new-maintenance-task-card">
           <div className="new-maintenance-task-field">
-            <label className="new-maintenance-task-label">כותרת המשימה *</label>
-            <input
-              className="new-maintenance-task-input"
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="הזינו כותרת"
-            />
-          </div>
-
-          <div className="new-maintenance-task-field">
-            <label className="new-maintenance-task-label">תיאור *</label>
+            <label className="new-maintenance-task-label">תיאור הקריאה *</label>
             <textarea
               className="new-maintenance-task-input new-maintenance-task-textarea"
               value={description}

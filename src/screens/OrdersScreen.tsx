@@ -48,11 +48,6 @@ function OrdersScreen({ userName }: OrdersScreenProps) {
     }
   }
 
-  const totals = useMemo(() => {
-    const totalPaid = orders.reduce((sum, o) => sum + o.paidAmount, 0)
-    return { count: orders.length, totalPaid }
-  }, [orders])
-
   // Group orders by unit (hotel)
   const ordersByUnit = useMemo(() => {
     // Start with all known units from UNIT_NAMES
@@ -71,19 +66,18 @@ function OrdersScreen({ userName }: OrdersScreenProps) {
       unitMap.set(unitName, unit)
     })
     
-    // Convert to array and filter out units with no orders (or keep all units)
+    // Convert to array and show all units (not just ones with orders)
     return Array.from(unitMap.values())
-      .filter(unit => unit.orders.length > 0) // Only show units with orders
       .sort((a, b) => a.unitName.localeCompare(b.unitName))
   }, [orders])
 
   const getUnitStats = (unitOrders: Order[]) => {
     const total = unitOrders.length
-    const paid = unitOrders.filter(o => 
-      o.status === 'שולם' || (o.totalAmount > 0 && o.paidAmount >= o.totalAmount)
+    // Count orders that aren't closed (not "שולם" and not "בוטל")
+    const open = unitOrders.filter(o => 
+      o.status !== 'שולם' && o.status !== 'בוטל'
     ).length
-    const unpaid = total - paid
-    return { total, paid, unpaid }
+    return { total, open }
   }
 
   const handleCloseOrder = async (orderId: string, paymentMethod: string) => {
@@ -193,37 +187,6 @@ function OrdersScreen({ userName }: OrdersScreenProps) {
           <p className="orders-page-subtitle">
             שלום {userName}, ניהול הזמנות, תשלומים וסטטוסים
           </p>
-          <button
-            className="orders-add-button"
-            onClick={createOrder}
-            type="button"
-          >
-            + יצירת הזמנה חדשה
-          </button>
-        </div>
-
-        <div className="orders-summary-card-enhanced">
-          <div className="orders-summary-card-header">
-            <h2 className="orders-summary-title-enhanced">סיכום מהיר</h2>
-          </div>
-          <div className="orders-summary-stats-row">
-            <div className="orders-summary-stat-item">
-              <div className="orders-summary-stat-value">{totals.count}</div>
-              <div className="orders-summary-stat-label">הזמנות</div>
-            </div>
-            <div className="orders-summary-stat-divider" />
-            <div className="orders-summary-stat-item">
-              <div className="orders-summary-stat-value">
-                ₪{totals.totalPaid.toLocaleString('he-IL')}
-              </div>
-              <div className="orders-summary-stat-label">שולם עד כה</div>
-            </div>
-          </div>
-          <div className="orders-summary-note-container">
-            <p className="orders-summary-note-enhanced">
-              יצוא לאקסל ודו״ח הוצאות יתווספו בהמשך
-            </p>
-          </div>
         </div>
 
         {orders.length === 0 ? (
@@ -249,8 +212,17 @@ function OrdersScreen({ userName }: OrdersScreenProps) {
             </div>
           </div>
         ) : (
-          <div className="orders-units-grid">
-            {ordersByUnit.map(unit => {
+          <div>
+            <button
+              className="orders-add-button"
+              onClick={createOrder}
+              type="button"
+              style={{ marginBottom: 16 }}
+            >
+              + יצירת הזמנה חדשה
+            </button>
+            <div className="orders-units-grid">
+              {ordersByUnit.map(unit => {
               const stats = getUnitStats(unit.orders)
               return (
                 <div
@@ -269,25 +241,16 @@ function OrdersScreen({ userName }: OrdersScreenProps) {
                   </div>
                   <div className="orders-unit-stats">
                     <div className="orders-unit-stat-item">
-                      <span className="orders-unit-stat-value">{stats.total}</span>
-                      <span className="orders-unit-stat-label">סה״כ הזמנות</span>
-                    </div>
-                    <div className="orders-unit-stat-item">
                       <span className="orders-unit-stat-value" style={{ color: '#22c55e' }}>
-                        {stats.paid}
+                        {stats.open}
                       </span>
-                      <span className="orders-unit-stat-label">שולם</span>
-                    </div>
-                    <div className="orders-unit-stat-item">
-                      <span className="orders-unit-stat-value" style={{ color: '#f59e0b' }}>
-                        {stats.unpaid}
-                      </span>
-                      <span className="orders-unit-stat-label">לא שולם</span>
+                      <span className="orders-unit-stat-label">הזמנות פתוחות</span>
                     </div>
                   </div>
                 </div>
               )
             })}
+            </div>
           </div>
         )}
       </div>

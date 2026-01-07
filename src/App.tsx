@@ -7,6 +7,7 @@ import SignInScreen from './screens/SignInScreen'
 import HubScreen from './screens/HubScreen'
 import OrdersScreen from './screens/OrdersScreen'
 import OrderEditScreen from './screens/OrderEditScreen'
+import PaymentConfirmationScreen from './screens/PaymentConfirmationScreen'
 import ExitInspectionsScreen from './screens/ExitInspectionsScreen'
 import CleaningInspectionsScreen from './screens/CleaningInspectionsScreen'
 import MonthlyInspectionsScreen from './screens/MonthlyInspectionsScreen'
@@ -27,6 +28,7 @@ import ChatScreen from './screens/ChatScreen'
 import AttendanceScreen from './screens/AttendanceScreen'
 import CleaningScheduleScreen from './screens/CleaningScheduleScreen'
 import EmployeeManagementScreen from './screens/EmployeeManagementScreen'
+import DownloadScreen from './screens/DownloadScreen'
 import './App.css'
 
 // Component to handle notifications polling
@@ -273,6 +275,16 @@ function App() {
           } 
         />
         <Route 
+          path="/payment-confirmation/:orderId" 
+          element={
+            userName ? (
+              <PaymentConfirmationScreen />
+            ) : (
+              <Navigate to="/signin" replace />
+            )
+          } 
+        />
+        <Route 
           path="/exit-inspections" 
           element={
             userName ? (
@@ -471,6 +483,10 @@ function App() {
               <Navigate to="/signin" replace />
             )
           } 
+        />
+        <Route 
+          path="/download" 
+          element={<DownloadScreen />} 
         />
       </Routes>
     </BrowserRouter>

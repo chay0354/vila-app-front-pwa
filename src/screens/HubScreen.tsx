@@ -29,16 +29,17 @@ function HubScreen({ userName, userRole, userImageUrl, onSignOut }: HubScreenPro
 
   const loadMaintenanceTasksCount = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/maintenance/tasks/stats`)
+      // Load all tasks and count them the same way as MaintenanceScreen does
+      // MaintenanceScreen uses: unit.tasks.filter(t => t.status === 'פתוח').length
+      // So we do the same - count only tasks where status is exactly 'פתוח'
+      const res = await fetch(`${API_BASE_URL}/api/maintenance/tasks`)
       if (!res.ok) {
-        console.error('Failed to load maintenance tasks stats:', res.status)
+        console.error('Failed to load maintenance tasks:', res.status)
         return
       }
-      const data = await res.json()
-      // Sum up all open tasks from all units
-      const totalOpen = (data || []).reduce((sum: number, stat: any) => {
-        return sum + (stat.open || 0)
-      }, 0)
+      const tasks = await res.json() || []
+      // Count only tasks with status exactly 'פתוח' - same logic as MaintenanceScreen.getUnitStats()
+      const totalOpen = tasks.filter((t: any) => (t.status || '').toString().trim() === 'פתוח').length
       setOpenMaintenanceTasksCount(totalOpen)
     } catch (err) {
       console.error('Error loading maintenance tasks count:', err)

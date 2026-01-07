@@ -59,8 +59,15 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
         const taskUnit = byId.get(taskUnitId) || byId.get('unit-1')
         if (!taskUnit) return
 
+        // CRITICAL: Always use the database ID - never generate a client-side ID
+        // If the database doesn't have an ID, skip this task
+        if (!t.id) {
+          console.error('[MaintenanceTaskDetailScreen] Task missing ID:', t);
+          return;
+        }
+        
         const task: MaintenanceTask = {
-          id: (t.id || `task-${Date.now()}`).toString(),
+          id: t.id.toString(), // Use the actual database UUID
           unitId: taskUnitId,
           title: (t.title || '').toString(),
           description: (t.description || '').toString(),
@@ -132,8 +139,9 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
           console.log('[PWA TaskDetail] ==========================================')
           
           // Update task with full data including imageUri and closingImageUri
+          // CRITICAL: Always use the database ID from the response, not the client-generated one
           const updatedTask: MaintenanceTask = {
-            id: currentTask.id,
+            id: (fullTaskData.id || currentTask.id).toString(), // Use the actual database UUID
             unitId: currentTask.unitId,
             title: fullTaskData.title || currentTask.title,
             description: fullTaskData.description || currentTask.description,
@@ -368,7 +376,7 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
             <p className="maintenance-task-detail-description">{task.description}</p>
           </div>
 
-          {/* Opening Media (imageUri) - show for all tasks */}
+          {/* Opening Media (imageUri) - ALWAYS show if exists, even for closed tasks */}
           {task.imageUri ? (
             <div className="maintenance-task-detail-section maintenance-task-detail-section-with-media">
               <div className="maintenance-task-detail-media-header-overlay">
@@ -407,16 +415,13 @@ function MaintenanceTaskDetailScreen({}: MaintenanceTaskDetailScreenProps) {
                 )}
               </div>
             </div>
-          ) : (
+          ) : task.status === 'סגור' ? (
             <div className="maintenance-task-detail-section">
               <p style={{ color: '#999', fontStyle: 'italic' }}>
-                {(() => {
-                  console.log('[PWA TaskDetail] No imageUri available for task:', task.id)
-                  return 'אין תמונה או וידאו פתיחה'
-                })()}
+                אין תמונה או וידאו פתיחה
               </p>
             </div>
-          )}
+          ) : null}
 
           {/* Closing Media (closingImageUri) - show only for closed tasks */}
           {task.status === 'סגור' && task.closingImageUri && (

@@ -14,7 +14,7 @@ function MaintenanceTasksScreen({}: MaintenanceTasksScreenProps) {
   const { unitId } = useParams<{ unitId: string }>()
   const [unit, setUnit] = useState<MaintenanceUnit | null>(null)
   const [systemUsers, setSystemUsers] = useState<Array<{ id: string; username: string }>>([])
-  const [filter, setFilter] = useState<'all' | 'open' | 'closed'>('all')
+  const [filter, setFilter] = useState<'open' | 'closed'>('open')
 
   useEffect(() => {
     loadSystemUsers()
@@ -50,8 +50,15 @@ function MaintenanceTasksScreen({}: MaintenanceTasksScreenProps) {
         const taskUnit = byId.get(taskUnitId) || byId.get('unit-1')
         if (!taskUnit) return
 
+        // CRITICAL: Always use the database ID - never generate a client-side ID
+        // If the database doesn't have an ID, skip this task
+        if (!t.id) {
+          console.error('[MaintenanceTasksScreen] Task missing ID:', t);
+          return;
+        }
+        
         const task: MaintenanceTask = {
-          id: (t.id || `task-${Date.now()}`).toString(),
+          id: t.id.toString(), // Use the actual database UUID
           unitId: taskUnitId,
           title: (t.title || '').toString(),
           description: (t.description || '').toString(),
@@ -146,22 +153,13 @@ function MaintenanceTasksScreen({}: MaintenanceTasksScreenProps) {
             >
               קריאות פתוחות
             </button>
-            <button
-              className={`maintenance-tasks-filter-button ${filter === 'all' ? 'active' : ''}`}
-              onClick={() => setFilter('all')}
-              type="button"
-            >
-              סה״כ קריאות
-            </button>
           </div>
         </div>
 
         {(() => {
           const today = new Date().toISOString().split('T')[0];
           
-          const filteredTasks = filter === 'all' 
-            ? unit.tasks 
-            : filter === 'open' 
+          const filteredTasks = filter === 'open' 
             ? unit.tasks.filter(t => t.status === 'פתוח')
             : unit.tasks.filter(t => t.status === 'סגור')
           

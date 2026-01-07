@@ -380,38 +380,6 @@ function OrderEditScreen({ userName }: OrderEditScreenProps) {
                 dir="rtl"
               />
             </div>
-            <div className="order-edit-field-half">
-              <label className="order-edit-label">סטטוס הזמנה</label>
-              <div className="order-edit-select-wrapper">
-                <button
-                  className="order-edit-select"
-                  onClick={() => setStatusOpen(!statusOpen)}
-                  type="button"
-                >
-                  <span className="order-edit-select-value">{status}</span>
-                  <span className="order-edit-select-caret">▾</span>
-                </button>
-                {statusOpen && (
-                  <div className="order-edit-select-list">
-                    {statusOptions.map((option) => (
-                      <button
-                        key={option}
-                        className={`order-edit-select-item ${
-                          option === status ? 'active' : ''
-                        }`}
-                        onClick={() => {
-                          setStatus(option)
-                          setStatusOpen(false)
-                        }}
-                        type="button"
-                      >
-                        {option}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
           </div>
 
           {isNewOrder ? (
@@ -426,40 +394,6 @@ function OrderEditScreen({ userName }: OrderEditScreenProps) {
                   placeholder="0"
                   dir="rtl"
                 />
-              </div>
-              <div className="order-edit-field-half">
-                <label className="order-edit-label">אופן תשלום</label>
-                <div className="order-edit-select-wrapper">
-                  <button
-                    className="order-edit-select"
-                    onClick={() => setMethodOpen(!methodOpen)}
-                    type="button"
-                  >
-                    <span className="order-edit-select-value">
-                      {paymentMethod || 'בחרו אופן תשלום'}
-                    </span>
-                    <span className="order-edit-select-caret">▾</span>
-                  </button>
-                  {methodOpen && (
-                    <div className="order-edit-select-list">
-                      {paymentOptions.map((option) => (
-                        <button
-                          key={option}
-                          className={`order-edit-select-item ${
-                            option === paymentMethod ? 'active' : ''
-                          }`}
-                          onClick={() => {
-                            setPaymentMethod(option)
-                            setMethodOpen(false)
-                          }}
-                          type="button"
-                        >
-                          {option}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
               </div>
             </div>
           ) : (
@@ -486,43 +420,6 @@ function OrderEditScreen({ userName }: OrderEditScreenProps) {
                     placeholder="0"
                     dir="rtl"
                   />
-                </div>
-              </div>
-
-              <div className="order-edit-field-row">
-                <div className="order-edit-field-half">
-                  <label className="order-edit-label">אופן תשלום</label>
-                  <div className="order-edit-select-wrapper">
-                    <button
-                      className="order-edit-select"
-                      onClick={() => setMethodOpen(!methodOpen)}
-                      type="button"
-                    >
-                      <span className="order-edit-select-value">
-                        {paymentMethod || 'בחרו אופן תשלום'}
-                      </span>
-                      <span className="order-edit-select-caret">▾</span>
-                    </button>
-                    {methodOpen && (
-                      <div className="order-edit-select-list">
-                        {paymentOptions.map((option) => (
-                          <button
-                            key={option}
-                            className={`order-edit-select-item ${
-                              option === paymentMethod ? 'active' : ''
-                            }`}
-                            onClick={() => {
-                              setPaymentMethod(option)
-                              setMethodOpen(false)
-                            }}
-                            type="button"
-                          >
-                            {option}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
                 </div>
               </div>
 

@@ -1,0 +1,164 @@
+.download-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.download-content {
+  width: 100%;
+  max-width: 600px;
+}
+
+.download-header {
+  text-align: center;
+  margin-bottom: 40px;
+  color: #ffffff;
+}
+
+.download-title {
+  font-size: 36px;
+  font-weight: 700;
+  margin: 0 0 12px 0;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.download-subtitle {
+  font-size: 18px;
+  margin: 0;
+  opacity: 0.9;
+}
+
+.download-card {
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 40px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  text-align: center;
+}
+
+.download-icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+}
+
+.download-app-name {
+  font-size: 28px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 8px 0;
+}
+
+.download-app-version {
+  font-size: 16px;
+  color: #64748b;
+  margin: 0 0 4px 0;
+}
+
+.download-app-size {
+  font-size: 16px;
+  color: #64748b;
+  margin: 0 0 32px 0;
+}
+
+.download-button {
+  width: 100%;
+  padding: 18px 32px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  transition: all 0.3s ease;
+  margin-bottom: 32px;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.download-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+}
+
+.download-button:active {
+  transform: translateY(0);
+}
+
+.download-button-icon {
+  font-size: 24px;
+}
+
+.download-instructions {
+  text-align: right;
+  margin-top: 32px;
+  padding-top: 32px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.download-instructions-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 16px 0;
+  text-align: right;
+}
+
+.download-instructions-list {
+  text-align: right;
+  padding-right: 20px;
+  margin: 0;
+  color: #475569;
+  line-height: 1.8;
+}
+
+.download-instructions-list li {
+  margin-bottom: 12px;
+}
+
+.download-note {
+  margin-top: 24px;
+  padding: 16px;
+  background: #f1f5f9;
+  border-radius: 8px;
+  text-align: right;
+}
+
+.download-note p {
+  margin: 0;
+  color: #475569;
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .download-title {
+    font-size: 28px;
+  }
+
+  .download-subtitle {
+    font-size: 16px;
+  }
+
+  .download-card {
+    padding: 24px;
+  }
+
+  .download-app-name {
+    font-size: 24px;
+  }
+}
+
+

@@ -43,8 +43,15 @@ function MaintenanceScreen({}: MaintenanceScreenProps) {
         const unit = byId.get(unitId) || byId.get('unit-1')
         if (!unit) return
 
+        // CRITICAL: Always use the database ID - never generate a client-side ID
+        // If the database doesn't have an ID, skip this task
+        if (!t.id) {
+          console.error('[MaintenanceScreen] Task missing ID:', t);
+          return;
+        }
+        
         const task = {
-          id: (t.id || `task-${Date.now()}`).toString(),
+          id: t.id.toString(), // Use the actual database UUID
           unitId,
           title: (t.title || '').toString(),
           description: (t.description || '').toString(),
@@ -119,29 +126,25 @@ function MaintenanceScreen({}: MaintenanceScreenProps) {
           ) : (
             <>
               <div className="maintenance-unit-stat-item">
-                <span className="maintenance-unit-stat-value">{stats.total}</span>
-                <span className="maintenance-unit-stat-label">סה״כ קריאות</span>
-              </div>
-              <div className="maintenance-unit-stat-item">
-                <span className="maintenance-unit-stat-value" style={{ color: '#f59e0b' }}>
+                <span className="maintenance-unit-stat-value" style={{ color: '#ef4444' }}>
                   {stats.open}
                 </span>
                 <span className="maintenance-unit-stat-label">קריאות פתוחות</span>
               </div>
               <div className="maintenance-unit-stat-item">
-                <span className="maintenance-unit-stat-value" style={{ color: '#22c55e' }}>
+                <span className="maintenance-unit-stat-value" style={{ color: '#3b82f6' }}>
                   {stats.closed}
                 </span>
                 <span className="maintenance-unit-stat-label">קריאות סגורות</span>
               </div>
               <div className="maintenance-unit-stat-item">
-                <span className="maintenance-unit-stat-value" style={{ color: '#3b82f6' }}>
+                <span className="maintenance-unit-stat-value" style={{ color: '#ef4444' }}>
                   {stats.openedToday}
                 </span>
                 <span className="maintenance-unit-stat-label">נפתח היום</span>
               </div>
               <div className="maintenance-unit-stat-item">
-                <span className="maintenance-unit-stat-value" style={{ color: '#8b5cf6' }}>
+                <span className="maintenance-unit-stat-value" style={{ color: '#3b82f6' }}>
                   {stats.closedToday}
                 </span>
                 <span className="maintenance-unit-stat-label">נסגר היום</span>

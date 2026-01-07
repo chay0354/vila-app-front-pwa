@@ -39,6 +39,9 @@ function EmployeeManagementScreen({ userName }: EmployeeManagementScreenProps) {
   const [editingWage, setEditingWage] = useState<string | null>(null)
   const [wageInput, setWageInput] = useState<string>('')
   const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null)
+  const [editingLogId, setEditingLogId] = useState<string | null>(null)
+  const [editClockIn, setEditClockIn] = useState<string>('')
+  const [editClockOut, setEditClockOut] = useState<string>('')
   const isAdmin = userName.toLowerCase() === 'admin'
 
   useEffect(() => {
@@ -121,6 +124,78 @@ function EmployeeManagementScreen({ userName }: EmployeeManagementScreenProps) {
   const handleStartEditWage = (employee: Employee) => {
     setEditingWage(employee.id)
     setWageInput(employee.hourly_wage?.toString() || '')
+  }
+
+  const updateAttendanceLog = async (logId: string, clockIn: string, clockOut: string | null) => {
+    try {
+      // Find the log to get the original date
+      const log = attendanceLogs.find(l => l.id === logId)
+      if (!log) {
+        alert('לא נמצא רשומת נוכחות')
+        return
+      }
+
+      // Parse the original clock_in to get the date
+      const originalClockIn = new Date(log.clock_in)
+      const [inHours, inMinutes] = clockIn.split(':').map(Number)
+      const clockInDate = new Date(originalClockIn)
+      clockInDate.setHours(inHours, inMinutes, 0, 0)
+
+      let clockOutDate: Date | null = null
+      if (clockOut && clockOut !== 'פתוח' && clockOut.trim() !== '') {
+        const [outHours, outMinutes] = clockOut.split(':').map(Number)
+        clockOutDate = new Date(originalClockIn)
+        clockOutDate.setHours(outHours, outMinutes, 0, 0)
+        // If clock out is before clock in, assume it's the next day
+        if (clockOutDate < clockInDate) {
+          clockOutDate.setDate(clockOutDate.getDate() + 1)
+        }
+      }
+
+      const payload: any = {
+        clock_in: clockInDate.toISOString(),
+      }
+      if (clockOutDate) {
+        payload.clock_out = clockOutDate.toISOString()
+      } else if (clockOut === null || clockOut === '' || clockOut === 'פתוח') {
+        payload.clock_out = null
+      }
+
+      const res = await fetch(`${API_BASE_URL}/api/attendance/logs/${encodeURIComponent(logId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => '')
+        throw new Error(errorText || 'לא ניתן לעדכן את רשומת הנוכחות')
+      }
+
+      // Reload attendance logs
+      await loadAttendanceLogs()
+      setEditingLogId(null)
+      alert('רשומת הנוכחות עודכנה בהצלחה')
+    } catch (err: any) {
+      console.error('Error updating attendance log:', err)
+      alert(err.message || 'לא ניתן לעדכן את רשומת הנוכחות')
+    }
+  }
+
+  const startEditLog = (session: any) => {
+    setEditingLogId(session.id)
+    setEditClockIn(session.timeIn)
+    setEditClockOut(session.isOpen ? '' : session.timeOut)
+  }
+
+  const cancelEditLog = () => {
+    setEditingLogId(null)
+    setEditClockIn('')
+    setEditClockOut('')
+  }
+
+  const saveEditLog = async (logId: string) => {
+    await updateAttendanceLog(logId, editClockIn, editClockOut || null)
   }
 
   const handleSaveWage = (employeeId: string) => {
@@ -459,16 +534,65 @@ function EmployeeManagementScreen({ userName }: EmployeeManagementScreenProps) {
                             )}
                           </div>
                         </div>
-                        <div className="employee-session-times">
-                          <div className="employee-session-time-item">
-                            <span className="employee-session-time-label">כניסה:</span>
-                            <span className="employee-session-time-value">{session.timeIn}</span>
+                        {editingLogId === session.id ? (
+                          <div className="employee-session-edit">
+                            <div className="employee-session-edit-row">
+                              <label className="employee-session-edit-label">כניסה:</label>
+                              <input
+                                type="time"
+                                className="employee-session-edit-input"
+                                value={editClockIn}
+                                onChange={(e) => setEditClockIn(e.target.value)}
+                              />
+                            </div>
+                            <div className="employee-session-edit-row">
+                              <label className="employee-session-edit-label">יציאה:</label>
+                              <input
+                                type="time"
+                                className="employee-session-edit-input"
+                                value={editClockOut}
+                                onChange={(e) => setEditClockOut(e.target.value)}
+                                placeholder="פתוח"
+                              />
+                            </div>
+                            <div className="employee-session-edit-actions">
+                              <button
+                                className="employee-session-edit-save"
+                                onClick={() => saveEditLog(session.id)}
+                                type="button"
+                              >
+                                שמור
+                              </button>
+                              <button
+                                className="employee-session-edit-cancel"
+                                onClick={cancelEditLog}
+                                type="button"
+                              >
+                                ביטול
+                              </button>
+                            </div>
                           </div>
-                          <div className="employee-session-time-item">
-                            <span className="employee-session-time-label">יציאה:</span>
-                            <span className="employee-session-time-value">{session.timeOut}</span>
-                          </div>
-                        </div>
+                        ) : (
+                          <>
+                            <div className="employee-session-times">
+                              <div className="employee-session-time-item">
+                                <span className="employee-session-time-label">כניסה:</span>
+                                <span className="employee-session-time-value">{session.timeIn}</span>
+                              </div>
+                              <div className="employee-session-time-item">
+                                <span className="employee-session-time-label">יציאה:</span>
+                                <span className="employee-session-time-value">{session.timeOut}</span>
+                              </div>
+                            </div>
+                            <button
+                              className="employee-session-edit-button"
+                              onClick={() => startEditLog(session)}
+                              type="button"
+                            >
+                              ערוך
+                            </button>
+                          </>
+                        )}
                       </div>
                     ))}
                   </div>
