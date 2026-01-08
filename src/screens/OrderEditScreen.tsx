@@ -24,12 +24,19 @@ function OrderEditScreen({ userName }: OrderEditScreenProps) {
   const [arrivalDate, setArrivalDate] = useState('')
   const [departureDate, setDepartureDate] = useState('')
   const [guestsCount, setGuestsCount] = useState('0')
-  const [specialRequests, setSpecialRequests] = useState('')
   const [internalNotes, setInternalNotes] = useState('')
   const [addPayment, setAddPayment] = useState('')
   const [methodOpen, setMethodOpen] = useState(false)
   const [unitOpen, setUnitOpen] = useState(false)
   const [showAddPayment, setShowAddPayment] = useState(false)
+
+  // Helper function to get Hebrew day name
+  const getHebrewDayName = (dateString: string): string => {
+    if (!dateString) return ''
+    const date = new Date(dateString + 'T00:00:00')
+    const dayNames = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת']
+    return dayNames[date.getDay()]
+  }
 
   useEffect(() => {
     if (id) {
@@ -56,7 +63,6 @@ function OrderEditScreen({ userName }: OrderEditScreenProps) {
     setArrivalDate(loadedOrder.arrivalDate)
     setDepartureDate(loadedOrder.departureDate)
     setGuestsCount(loadedOrder.guestsCount.toString())
-    setSpecialRequests(loadedOrder.specialRequests || '')
     setInternalNotes(loadedOrder.internalNotes || '')
     setIsNewOrder(loadedOrder.totalAmount === 0 && loadedOrder.paidAmount === 0)
   }
@@ -78,7 +84,6 @@ function OrderEditScreen({ userName }: OrderEditScreenProps) {
             departureDate: o.departure_date ?? o.departureDate ?? '',
             status: (o.status ?? 'חדש') as OrderStatus,
             guestsCount: Number(o.guests_count ?? o.guestsCount ?? 0),
-            specialRequests: o.special_requests ?? o.specialRequests ?? '',
             internalNotes: o.internal_notes ?? o.internalNotes ?? '',
             paidAmount: Number(o.paid_amount ?? o.paidAmount ?? 0),
             totalAmount: Number(o.total_amount ?? o.totalAmount ?? 0),
@@ -115,7 +120,6 @@ function OrderEditScreen({ userName }: OrderEditScreenProps) {
         departureDate: data.departure_date ?? '',
         status: (data.status ?? 'חדש') as OrderStatus,
         guestsCount: Number(data.guests_count ?? 0),
-        specialRequests: data.special_requests ?? '',
         internalNotes: data.internal_notes ?? '',
         paidAmount: Number(data.paid_amount ?? 0),
         totalAmount: Number(data.total_amount ?? 0),
@@ -198,7 +202,6 @@ function OrderEditScreen({ userName }: OrderEditScreenProps) {
         arrival_date: arrivalDate.trim(),
         departure_date: departureDate.trim(),
         guests_count: Number(guestsCount) || 0,
-        special_requests: specialRequests.trim(),
         internal_notes: internalNotes.trim(),
         opened_by: userName || undefined,
       }
@@ -346,7 +349,14 @@ function OrderEditScreen({ userName }: OrderEditScreenProps) {
 
           <div className="order-edit-field-row">
             <div className="order-edit-field-half">
-              <label className="order-edit-label">תאריך הגעה</label>
+              <label className="order-edit-label">
+                תאריך הגעה
+                {arrivalDate && (
+                  <span style={{ marginRight: '8px', color: '#3b82f6', fontWeight: '600' }}>
+                    ({getHebrewDayName(arrivalDate)})
+                  </span>
+                )}
+              </label>
               <input
                 className="order-edit-input"
                 type="date"
@@ -356,7 +366,14 @@ function OrderEditScreen({ userName }: OrderEditScreenProps) {
               />
             </div>
             <div className="order-edit-field-half">
-              <label className="order-edit-label">תאריך עזיבה</label>
+              <label className="order-edit-label">
+                תאריך עזיבה
+                {departureDate && (
+                  <span style={{ marginRight: '8px', color: '#3b82f6', fontWeight: '600' }}>
+                    ({getHebrewDayName(departureDate)})
+                  </span>
+                )}
+              </label>
               <input
                 className="order-edit-input"
                 type="date"
@@ -424,16 +441,6 @@ function OrderEditScreen({ userName }: OrderEditScreenProps) {
 
             </>
           )}
-
-          <label className="order-edit-label">בקשות מיוחדות</label>
-          <textarea
-            className="order-edit-textarea"
-            value={specialRequests}
-            onChange={(e) => setSpecialRequests(e.target.value)}
-            placeholder="לדוגמה: בקשה ללול תינוק"
-            dir="rtl"
-            rows={3}
-          />
 
           <label className="order-edit-label">הערות פנימיות</label>
           <textarea

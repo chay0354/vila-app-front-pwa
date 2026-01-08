@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { Order, paymentOptions } from '../types/orders'
 import './OrderCard.css'
 
@@ -10,7 +9,6 @@ type OrderCardProps = {
 }
 
 function OrderCard({ order, onEdit, onClose }: OrderCardProps) {
-  const navigate = useNavigate()
   const [showCloseModal, setShowCloseModal] = useState(false)
   const [showOtherPayment, setShowOtherPayment] = useState(false)
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('')

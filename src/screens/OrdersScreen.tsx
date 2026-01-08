@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { API_BASE_URL } from '../apiConfig'
-import { Order, UNIT_NAMES } from '../types/orders'
+import { Order, OrderStatus, UNIT_NAMES } from '../types/orders'
 import OrderCard from '../components/OrderCard'
 import './OrdersScreen.css'
 
@@ -79,7 +79,9 @@ function OrdersScreen({ userName }: OrdersScreenProps) {
     })
     
     // Convert to array and show all units (not just ones with orders)
+    // Filter out "לא צוין" (Not Specified) unit
     return Array.from(unitMap.values())
+      .filter(unit => unit.unitName !== 'לא צוין')
       .sort((a, b) => a.unitName.localeCompare(b.unitName))
   }, [orders])
 
@@ -104,15 +106,25 @@ function OrdersScreen({ userName }: OrdersScreenProps) {
         ? currentPaidAmount + paymentAmount 
         : totalAmount // If no amount specified, pay full amount
       
-      // Determine if order should be fully closed
-      const shouldCloseOrder = newPaidAmount >= totalAmount
+      // Determine the correct status based on payment amount
+      let newStatus: OrderStatus
+      if (newPaidAmount >= totalAmount) {
+        // Fully paid
+        newStatus = 'שולם'
+      } else if (newPaidAmount > 0) {
+        // Partially paid
+        newStatus = 'שולם חלקית'
+      } else {
+        // No payment, keep current status or default to 'חדש'
+        newStatus = (currentOrder?.status || 'חדש') as OrderStatus
+      }
       
       const res = await fetch(`${API_BASE_URL}/api/orders/${orderId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           paid_amount: newPaidAmount,
-          status: shouldCloseOrder ? 'שולם' : currentOrder?.status || 'חדש',
+          status: newStatus,
           payment_method: paymentMethod,
         }),
       })
@@ -215,11 +227,7 @@ function OrdersScreen({ userName }: OrdersScreenProps) {
           </p>
         </div>
 
-        {orders.length === 0 ? (
-          <div className="orders-empty-state">
-            <p className="orders-empty-text">אין הזמנות כרגע</p>
-          </div>
-        ) : selectedUnit ? (
+        {selectedUnit ? (
           <div>
             <div className="orders-unit-header">
               <h2 className="orders-unit-title">הזמנות - {selectedUnit}</h2>

@@ -96,16 +96,14 @@ function HubScreen({ userName, userRole, userImageUrl, onSignOut }: HubScreenPro
         <div className="hub-quick-actions">
           <h2 className="hub-section-title">אפשרויות</h2>
           <div className="hub-quick-actions-row">
-            {canSeeEverything && (
-              <button
-                className="hub-quick-action-btn hub-quick-action-blue"
-                onClick={() => navigate('/orders')}
-                type="button"
-              >
-                <span className="hub-quick-action-icon">📑</span>
-                <span className="hub-quick-action-text">הזמנות</span>
-              </button>
-            )}
+            <button
+              className="hub-quick-action-btn hub-quick-action-blue"
+              onClick={() => navigate('/orders')}
+              type="button"
+            >
+              <span className="hub-quick-action-icon">📑</span>
+              <span className="hub-quick-action-text">הזמנות</span>
+            </button>
             <button
               className="hub-quick-action-btn hub-quick-action-orange"
               onClick={() => navigate('/exit-inspections')}
