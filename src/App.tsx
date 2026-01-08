@@ -275,7 +275,7 @@ function App() {
           } 
         />
         <Route 
-          path="/payment-confirmation/:orderId" 
+          path="/payment-confirmation" 
           element={
             userName ? (
               <PaymentConfirmationScreen />

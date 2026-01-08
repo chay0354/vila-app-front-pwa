@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { API_BASE_URL } from '../apiConfig'
 import { Order, UNIT_NAMES } from '../types/orders'
 import OrderCard from '../components/OrderCard'
@@ -11,12 +11,24 @@ type OrdersScreenProps = {
 
 function OrdersScreen({ userName }: OrdersScreenProps) {
   const navigate = useNavigate()
+  const location = useLocation()
   const [orders, setOrders] = useState<Order[]>([])
   const [selectedUnit, setSelectedUnit] = useState<string | null>(null)
 
   useEffect(() => {
     loadOrders()
   }, [])
+
+  // Reload orders when navigating to this page (e.g., returning from payment confirmation)
+  useEffect(() => {
+    if (location.pathname === '/orders') {
+      // Small delay to allow webhook to process payment
+      const timer = setTimeout(() => {
+        loadOrders()
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [location.pathname, location.state])
 
   const loadOrders = async () => {
     try {
@@ -80,13 +92,27 @@ function OrdersScreen({ userName }: OrdersScreenProps) {
     return { total, open }
   }
 
-  const handleCloseOrder = async (orderId: string, paymentMethod: string) => {
+  const handleCloseOrder = async (orderId: string, paymentMethod: string, paymentAmount?: number) => {
     try {
+      // Find the order to get current paid_amount
+      const currentOrder = orders.find(o => o.id === orderId)
+      const currentPaidAmount = currentOrder?.paidAmount || 0
+      const totalAmount = currentOrder?.totalAmount || 0
+      
+      // Calculate new paid amount (add payment amount to existing)
+      const newPaidAmount = paymentAmount 
+        ? currentPaidAmount + paymentAmount 
+        : totalAmount // If no amount specified, pay full amount
+      
+      // Determine if order should be fully closed
+      const shouldCloseOrder = newPaidAmount >= totalAmount
+      
       const res = await fetch(`${API_BASE_URL}/api/orders/${orderId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          status: 'שולם',
+          paid_amount: newPaidAmount,
+          status: shouldCloseOrder ? 'שולם' : currentOrder?.status || 'חדש',
           payment_method: paymentMethod,
         }),
       })

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Order, paymentOptions } from '../types/orders'
 import './OrderCard.css'
@@ -6,7 +6,7 @@ import './OrderCard.css'
 type OrderCardProps = {
   order: Order
   onEdit: (id: string) => void
-  onClose?: (id: string, paymentMethod: string) => void
+  onClose?: (id: string, paymentMethod: string, amount?: number) => void
 }
 
 function OrderCard({ order, onEdit, onClose }: OrderCardProps) {
@@ -14,6 +14,7 @@ function OrderCard({ order, onEdit, onClose }: OrderCardProps) {
   const [showCloseModal, setShowCloseModal] = useState(false)
   const [showOtherPayment, setShowOtherPayment] = useState(false)
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('')
+  const [paymentAmount, setPaymentAmount] = useState(0)
 
   const paidPercent = Math.min(
     100,
@@ -27,25 +28,59 @@ function OrderCard({ order, onEdit, onClose }: OrderCardProps) {
   // Check if order is open (not fully paid or cancelled)
   const isOpen = order.status !== 'שולם' && order.status !== 'בוטל'
   
-  const handleCloseOrder = (method: string) => {
+  // Initialize payment amount when modal opens
+  useEffect(() => {
+    if (showCloseModal && !showOtherPayment) {
+      setPaymentAmount(remainingAmount > 0 ? remainingAmount : order.totalAmount)
+    }
+  }, [showCloseModal, showOtherPayment, remainingAmount, order.totalAmount])
+  
+  const handleCloseOrder = (method: string, amount?: number) => {
     if (onClose) {
-      onClose(order.id, method)
+      onClose(order.id, method, amount)
     }
     setShowCloseModal(false)
     setShowOtherPayment(false)
     setSelectedPaymentMethod('')
+    setPaymentAmount(0)
   }
   
   const handleCloseWithCreditCard = () => {
-    // Navigate to payment confirmation page (for now, skip payment page)
-    navigate(`/payment-confirmation/${order.id}?method=אשראי`)
+    // Close modal first
     setShowCloseModal(false)
     setShowOtherPayment(false)
+    
+    // Use the selected payment amount (from slider) or remaining amount
+    const amountToPay = paymentAmount > 0 ? paymentAmount : (remainingAmount > 0 ? remainingAmount : order.totalAmount)
+    
+    // Check if unit is הודולה 1-5, use different payment URL
+    const isHodula = order.unitNumber && (
+      order.unitNumber === 'הודולה 1' ||
+      order.unitNumber === 'הודולה 2' ||
+      order.unitNumber === 'הודולה 3' ||
+      order.unitNumber === 'הודולה 4' ||
+      order.unitNumber === 'הודולה 5'
+    )
+    
+    const cardcomUrl = isHodula
+      ? 'https://secure.cardcom.solutions/EA/EA5/rEpuhCsHV0uqmqZNFTFFNw/PaymentSP'
+      : 'https://secure.cardcom.solutions/EA/EA5/PgwM0wy1uEC4Ade0BLZHlA/PaymentSP'
+    
+    const successUrl = encodeURIComponent(`https://vila-app-front-pwa.vercel.app/payment-confirmation?method=אשראי&amount=${amountToPay}&orderId=${order.id}`)
+    const failureUrl = encodeURIComponent(`https://vila-app-front-pwa.vercel.app/orders`)
+    
+    // Build Cardcom payment URL with parameters
+    const paymentUrl = `${cardcomUrl}?Sum=${amountToPay}&Coin=1&SuccessRedirectUrl=${successUrl}&ErrorRedirectUrl=${failureUrl}&OrderId=${order.id}&Description=${encodeURIComponent(`תשלום הזמנה ${order.unitNumber}`)}`
+    
+    // Redirect to Cardcom payment page (opens in browser)
+    window.location.href = paymentUrl
   }
   
   const handleCloseWithOther = () => {
     if (selectedPaymentMethod) {
-      handleCloseOrder(selectedPaymentMethod)
+      // Use the selected payment amount (from slider) or remaining amount
+      const amountToPay = paymentAmount > 0 ? paymentAmount : (remainingAmount > 0 ? remainingAmount : order.totalAmount)
+      handleCloseOrder(selectedPaymentMethod, amountToPay)
     }
   }
 
@@ -214,6 +249,7 @@ function OrderCard({ order, onEdit, onClose }: OrderCardProps) {
           setShowCloseModal(false)
           setShowOtherPayment(false)
           setSelectedPaymentMethod('')
+          setPaymentAmount(0)
         }}>
           <div className="order-close-modal-content" onClick={(e) => e.stopPropagation()}>
             <h3 className="order-close-modal-title">סגירת הזמנה</h3>
@@ -221,6 +257,25 @@ function OrderCard({ order, onEdit, onClose }: OrderCardProps) {
             
             {!showOtherPayment ? (
               <div className="order-close-modal-options">
+                {/* Payment Amount Slider */}
+                <div className="order-payment-amount-section">
+                  <label className="order-payment-amount-label">
+                    סכום לתשלום: ₪{paymentAmount > 0 ? paymentAmount.toLocaleString('he-IL') : remainingAmount.toLocaleString('he-IL')}
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max={remainingAmount}
+                    step="100"
+                    value={paymentAmount || remainingAmount}
+                    onChange={(e) => setPaymentAmount(Number(e.target.value))}
+                    className="order-payment-amount-slider"
+                  />
+                  <div className="order-payment-amount-info">
+                    <span>₪0</span>
+                    <span>₪{remainingAmount.toLocaleString('he-IL')}</span>
+                  </div>
+                </div>
                 <button
                   className="order-close-option-button"
                   onClick={handleCloseWithCreditCard}
@@ -238,6 +293,25 @@ function OrderCard({ order, onEdit, onClose }: OrderCardProps) {
               </div>
             ) : (
               <div className="order-close-modal-other">
+                {/* Payment Amount Slider */}
+                <div className="order-payment-amount-section">
+                  <label className="order-payment-amount-label">
+                    סכום לתשלום: ₪{paymentAmount > 0 ? paymentAmount.toLocaleString('he-IL') : remainingAmount.toLocaleString('he-IL')}
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max={remainingAmount}
+                    step="100"
+                    value={paymentAmount || remainingAmount}
+                    onChange={(e) => setPaymentAmount(Number(e.target.value))}
+                    className="order-payment-amount-slider"
+                  />
+                  <div className="order-payment-amount-info">
+                    <span>₪0</span>
+                    <span>₪{remainingAmount.toLocaleString('he-IL')}</span>
+                  </div>
+                </div>
                 <label className="order-close-modal-label">בחרו דרך תשלום:</label>
                 <div className="order-close-payment-select">
                   {paymentOptions.filter(method => method !== 'אשראי').map((method) => (
@@ -283,6 +357,7 @@ function OrderCard({ order, onEdit, onClose }: OrderCardProps) {
                   setShowCloseModal(false)
                   setShowOtherPayment(false)
                   setSelectedPaymentMethod('')
+                  setPaymentAmount(0)
                 }}
                 type="button"
               >
