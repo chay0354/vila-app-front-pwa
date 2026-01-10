@@ -62,16 +62,14 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
         const data = await res.json()
         console.log('Backend returned', data?.length || 0, 'cleaning inspections')
         
-        // Group by departure date - one mission per departure date
-        const missionsByDate = new Map() as Map<string, InspectionMission>
-        
-        (data || []).forEach((insp: any) => {
+        // Show all cleaning inspections - one per order (even if same departure date)
+        const finalMissions: InspectionMission[] = (data || []).map((insp: any) => {
           const backendTasks = (insp.tasks || []).map((t: any) => ({
             id: String(t.id),
             name: String(t.name || ''),
             completed: Boolean(t.completed),
           }))
-          
+
           console.log('Loaded cleaning inspection:', insp.id, 'with', backendTasks.length, 'tasks from backend')
           
           // Merge backend tasks with default tasks
@@ -102,7 +100,7 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
           }
           
           const departureDate = insp.departure_date || insp.departureDate || ''
-          const mission: InspectionMission = {
+          return {
             id: insp.id,
             orderId: insp.order_id || insp.orderId || '',
             unitNumber: insp.unit_number || insp.unitNumber || '',
@@ -111,16 +109,7 @@ function CleaningInspectionsScreen({}: CleaningInspectionsScreenProps) {
             status: (insp.status || 'זמן הביקורות טרם הגיע') as InspectionMission['status'],
             tasks,
           }
-          
-          // Group by departure date - keep the one with more completed tasks
-          const existing = missionsByDate.get(departureDate)
-          if (!existing || (existing.tasks.filter((t: InspectionTask) => t.completed).length < mission.tasks.filter((t: InspectionTask) => t.completed).length)) {
-            missionsByDate.set(departureDate, mission)
-          }
         })
-        
-        // Convert to array (one per departure date)
-        const finalMissions: InspectionMission[] = Array.from(missionsByDate.values())
         console.log('Setting cleaning missions (grouped by departure date):', finalMissions.length, 'missions')
         finalMissions.forEach((m: InspectionMission) => {
           const completedCount = m.tasks.filter((t: InspectionTask) => t.completed).length

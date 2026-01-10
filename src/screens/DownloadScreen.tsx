@@ -59,6 +59,49 @@ function DownloadScreen() {
             <p><strong>הערה:</strong> האפליקציה דורשת אנדרואיד 5.0 ומעלה</p>
           </div>
         </div>
+
+        <div className="download-card" style={{ marginTop: '2rem' }}>
+          <div className="download-icon">
+            <span style={{ fontSize: '48px' }}>🌐</span>
+          </div>
+          
+          <h2 className="download-app-name">אפליקציית ווב</h2>
+          <p className="download-app-version">גרסה: 1.0.0</p>
+          <p className="download-subtitle">ניתן להשתמש באפליקציה גם כ-Web Application ישירות מהדפדפן, ולהוסיף אותה למסך הבית באייפון או באנדרואיד.</p>
+
+          <a
+            href="https://vila-app-front-pwa.vercel.app/orders"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="download-button"
+            style={{ textDecoration: 'none', display: 'inline-block', marginTop: '1rem' }}
+          >
+            <span className="download-button-icon">🌐</span>
+            <span>פתח אפליקציית ווב</span>
+          </a>
+
+          <div className="download-instructions">
+            <h3 className="download-instructions-title">הוראות התקנה לאייפון:</h3>
+            <ol className="download-instructions-list">
+              <li>פתחו את דפדפן ספארי (Safari) במכשיר האייפון שלכם.</li>
+              <li>נווטו לכתובת: <a href="https://vila-app-front-pwa.vercel.app/orders" target="_blank" rel="noopener noreferrer">vila-app-front-pwa.vercel.app/orders</a></li>
+              <li>לחצו על כפתור ה"שיתוף" (Share) בתחתית המסך (מרובע עם חץ למעלה).</li>
+              <li>גללו למטה ובחרו באפשרות "הוסף למסך הבית" (Add to Home Screen).</li>
+              <li>אשרו את השם ולחצו "הוסף" (Add).</li>
+              <li>כעת האפליקציה תופיע על מסך הבית שלכם ותוכלו לפתוח אותה כמו כל אפליקציה אחרת.</li>
+            </ol>
+
+            <h3 className="download-instructions-title" style={{ marginTop: '1.5rem' }}>הוראות התקנה לאנדרואיד:</h3>
+            <ol className="download-instructions-list">
+              <li>פתחו את דפדפן Chrome במכשיר האנדרואיד שלכם.</li>
+              <li>נווטו לכתובת: <a href="https://vila-app-front-pwa.vercel.app/orders" target="_blank" rel="noopener noreferrer">vila-app-front-pwa.vercel.app/orders</a></li>
+              <li>לחצו על תפריט הדפדפן (שלוש נקודות בפינה הימנית העליונה).</li>
+              <li>בחרו "הוסף למסך הבית" או "Add to Home screen".</li>
+              <li>אשרו את השם ולחצו "הוסף" או "Add".</li>
+              <li>כעת האפליקציה תופיע על מסך הבית שלכם ותוכלו לפתוח אותה כמו כל אפליקציה אחרת.</li>
+            </ol>
+          </div>
+        </div>
       </div>
     </div>
   )
