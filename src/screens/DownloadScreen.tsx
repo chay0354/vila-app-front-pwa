@@ -40,11 +40,11 @@ function DownloadScreen() {
             onClick={handleDownload}
           >
             <span className="download-button-icon">⬇</span>
-            <span>הורד עכשיו</span>
+            <span>הורד עכשיו לאנדרואיד</span>
           </button>
 
           <div className="download-instructions">
-            <h3 className="download-instructions-title">הוראות התקנה:</h3>
+            <h3 className="download-instructions-title">הוראות התקנה לאנדרואיד:</h3>
             <ol className="download-instructions-list">
               <li>לחץ על כפתור "הורד עכשיו" למעלה</li>
               <li>אם מופיעה אזהרה, לחץ על "המשך" או "Allow"</li>
