@@ -30,7 +30,10 @@ function DownloadScreen() {
           
           <h2 className="download-app-name">Vila App</h2>
           <p className="download-app-version">גרסה: 1.0.0</p>
-          <p className="download-app-size">גודל: ~56 MB</p>
+          <p className="download-app-size">גודל: ~58 MB</p>
+          <p className="download-app-date" style={{ fontSize: '0.9em', color: '#666', marginTop: '8px' }}>
+            עודכן: {new Date().toLocaleDateString('he-IL')}
+          </p>
 
           <button 
             className="download-button"
@@ -62,6 +65,7 @@ function DownloadScreen() {
 }
 
 export default DownloadScreen
+
 
 
 
