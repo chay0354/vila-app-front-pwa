@@ -65,7 +65,7 @@ function DownloadScreen() {
             <h3 className="download-instructions-title">הוראות התקנה לאייפון:</h3>
             <ol className="download-instructions-list">
               <li>פתחו את דפדפן ספארי (Safari) במכשיר האייפון שלכם.</li>
-              <li>נווטו לכתובת: vila-app-front-pwa.vercel.app/orders</li>
+              <li>נווטו לכתובת: <a href="https://vila-app-front-pwa.vercel.app/orders" target="_blank" rel="noopener noreferrer" style={{ color: '#007AFF', textDecoration: 'underline' }}>vila-app-front-pwa.vercel.app/orders</a></li>
               <li>לחצו על כפתור ה"שיתוף" (Share) בתחתית המסך (מרובע עם חץ למעלה).</li>
               <li>גללו למטה ובחרו באפשרות "הוסף למסך הבית" (Add to Home Screen).</li>
               <li>אשרו את השם ולחצו "הוסף" (Add).</li>
